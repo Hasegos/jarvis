@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+
+        <header>
+            <h1>J.A.R.V.I.S</h1>
+            <p class="subtitle">Just A Rather Very Intelligent System</p>
+        </header>
+
+        <!-- 대화 영역 -->
+        <div class="chat-box" id="chatBox"></div>
+
+        <!-- 입력 영역 -->
+        <div class="input-area">
+
+            <!-- 텍스트 입력 -->
+            <div class="text-input-row">
+                <input
+                    type="text"
+                    id="textInput"
+                    placeholder="메시지를 입력하세요..."
+                    autocomplete="off"
+                />
+                <button id="sendBtn">전송</button>
+            </div>
+
+            <!-- 음성 입력 -->
+            <div class="voice-row">
+                <button id="voiceBtn" class="voice-btn">
+                    <span id="voiceBtnText">🎤 음성 입력</span>
+                </button>
+                <span id="voiceStatus" class="voice-status"></span>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script src="/static/js/jarvis.js"></script>
+</body>
+</html>
