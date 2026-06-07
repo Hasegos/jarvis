@@ -1,0 +1,42 @@
+services:
+
+  # ─────────────────────────────────────
+  # 1. FastAPI 웹앱
+  # ─────────────────────────────────────
+  jarvis:
+    build: .
+    container_name: jarvis
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────
+  # 2. PostgreSQL + pgvector
+  # ─────────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: jarvis_db
+    environment:
+      POSTGRES_USER: ${POSTGRESQL_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD}
+      POSTGRES_DB: ${POSTGRESQL_DATABASE}
+    ports:
+      - "5433:5432"
+    volumes:
+      - jarvis_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRESQL_USERNAME} -d ${POSTGRESQL_DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  jarvis_db_data:
