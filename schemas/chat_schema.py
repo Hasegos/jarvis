@@ -52,20 +52,3 @@ class SessionOut(BaseModel):
     summary         : Optional[str] = None
 
     model_config = {"from_attributes" : True}
-
-
-# ─────────────────────
-# 4. 음성 응답 스키마
-# ─────────────────────
-class VoiceResponse(BaseModel):
-    """
-    음성 메시지 응답 스키마.
-
-    Args:
-        session_id: 현재 대화 세션 ID.
-        text      : STT로 인식된 텍스트.
-        answer    : 어시스턴트 답변 텍스트.
-    """
-    session_id : int
-    text       : str
-    answer     : str
