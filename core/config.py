@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int
     LLM_STREAMING: bool
     HISTORY_LIMIT: int
+    LLM_THINKING_MODE: str
 
     # ──────────────────────────
     # 5. 계산된 프로퍼티 (DB URL)
