@@ -171,3 +171,29 @@ def update_session_summary(
     if session:
         session.summary = summary
         db.commit()
+
+
+# ───────────────────────────────────────────
+# 7. 세션의 전체 메시지 조회 (히스토리 복원용)
+# ───────────────────────────────────────────
+def get_all_messages_by_session(
+    db        : Session,
+    session_id: int,
+) -> list[Message]:
+    """
+    세션의 전체 메시지를 시간순으로 조회한다.
+
+    그래프 뷰에서 세션 클릭 시 대화 내용 복원에 사용한다.
+
+    Args:
+        db        : SQLAlchemy 세션
+        session_id: 조회할 세션 PK
+    Returns:
+        Message 객체 리스트 (오래된 것부터)
+    """
+    return (
+        db.query(Message)
+        .filter(Message.session_id == session_id)
+        .order_by(Message.created_at.asc())
+        .all()
+    )
