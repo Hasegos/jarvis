@@ -141,13 +141,14 @@ def get_messages_by_session(
     Returns:
         Message 객체 리스트 (오래된 것부터)
     """
-    return (
+    rows = (
         db.query(Message)
         .filter(Message.session_id == session_id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.created_at.desc())
         .limit(limit)
         .all()
     )
+    return list(reversed(rows))
 
 
 # ─────────────────────

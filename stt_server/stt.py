@@ -1,11 +1,11 @@
-import os
-import tempfile
+import os, tempfile
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from faster_whisper import WhisperModel
 from pydub import AudioSegment
 
 from core.config import settings
+from core.constant import STT_HALLUCINATION_PHRASES
 
 
 # ─────────────────────────────────────
@@ -78,6 +78,11 @@ async def transcribe(file: UploadFile = File(...)):
             language=settings.STT_LANGUAGE,
         )
         text = "".join(seg.text for seg in segments).strip()
+
+        # 무음·노이즈 구간에서 Whisper가 만드는 유튜브 자막류 환청 차단
+        if any(phrase in text for phrase in STT_HALLUCINATION_PHRASES):
+            text = ""
+
         return {"text": text}
 
     except Exception as e:

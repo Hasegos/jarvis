@@ -1,18 +1,12 @@
 import base64
+import time
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from crud.chat_crud import (
-    create_message,
-    get_messages_by_session,
-    get_or_create_session,
-)
-from core.config import settings
 from db.session import get_db
-from services.embedding_service import embed_text
-from services.llm_service import chat, stream_chat, strip_thinking
+from services.chat_service import process_message
 from services.stt_service import transcribe_audio
 from services.tts_service import synthesize
 
@@ -42,9 +36,12 @@ async def voice_chat(
     Returns:
         JSONResponse (session_id, user_text, answer, audio_b64)
     """
+    t_total = time.perf_counter()
+
     # ──────────────────────────────────────
     # 1-1. STT — 음성 → 텍스트
     # ──────────────────────────────────────
+    t0 = time.perf_counter()
     audio_bytes = await file.read()
     try:
         user_text = await transcribe_audio(audio_bytes, file.filename or "audio.webm")
@@ -53,6 +50,7 @@ async def voice_chat(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
+    print(f"[voice] STT={round(time.perf_counter() - t0, 2)}s")
 
     if not user_text:
         raise HTTPException(
@@ -61,33 +59,14 @@ async def voice_chat(
         )
 
     # ──────────────────────────────────────
-    # 1-2. 세션 판단
-    # ──────────────────────────────────────
-    session = get_or_create_session(db, session_id)
-
-    # ──────────────────────────────────────
-    # 1-3. 대화 히스토리 구성
-    # ──────────────────────────────────────
-    messages = get_messages_by_session(
-        db,
-        session.session_id,
-        limit=settings.HISTORY_LIMIT,
-    )
-    history = [
-        {"role": msg.role, "content": msg.content}
-        for msg in messages
-    ]
-    history.append({"role": "user", "content": user_text})
-
-    # ──────────────────────────────────────
-    # 1-4. LLM 호출
+    # 1-2. 공통 파이프라인 (세션+LLM+임베딩+저장)
     # ──────────────────────────────────────
     try:
-        if settings.LLM_STREAMING:
-            tokens = stream_chat(history)
-            answer = strip_thinking("".join(tokens))
-        else:
-            answer = chat(history)
+        session, answer, timings = await process_message(
+            db,
+            session_id,
+            user_text,
+        )
     except RuntimeError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -95,26 +74,9 @@ async def voice_chat(
         )
 
     # ──────────────────────────────────────
-    # 1-5. 임베딩 생성
+    # 1-3. TTS — 텍스트 → 음성
     # ──────────────────────────────────────
-    try:
-        user_embedding      = embed_text(user_text)
-        assistant_embedding = embed_text(answer)
-    except RuntimeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
-        )
-
-    # ──────────────────────────────────────
-    # 1-6. 메시지 저장
-    # ──────────────────────────────────────
-    create_message(db, session.session_id, "user",      user_text, user_embedding)
-    create_message(db, session.session_id, "assistant", answer,    assistant_embedding)
-
-    # ──────────────────────────────────────
-    # 1-7. TTS — 텍스트 → 음성
-    # ──────────────────────────────────────
+    t0 = time.perf_counter()
     try:
         tts_bytes = await synthesize(answer)
     except RuntimeError as e:
@@ -122,9 +84,16 @@ async def voice_chat(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
+    print(
+        f"[voice] TTS={round(time.perf_counter() - t0, 2)}s "
+        f"LLM={timings['llm']}s "
+        f"임베딩={timings['embedding']}s "
+        f"DB={timings['db']}s "
+        f"전체={round(time.perf_counter() - t_total, 2)}s"
+    )
 
     # ──────────────────────────────────────
-    # 1-8. JSON 반환 (오디오 base64 인코딩)
+    # 1-4. JSON 반환
     # ──────────────────────────────────────
     # HTTP 헤더는 latin-1만 허용 → 한국어 텍스트는 헤더 불가
     # 오디오를 base64로 인코딩해서 JSON에 포함

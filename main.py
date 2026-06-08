@@ -3,14 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
 from api.router import api_router
 from core.config import settings
+from core.templates import templates
 from db.session import engine
 from db.base import Base
-
 
 # ─────────────────────────────────────
 # 1. 앱 생명주기 (lifespan)
@@ -52,7 +51,6 @@ app = FastAPI(
 # 3. 정적 파일 + 템플릿
 # ─────────────────────────────────────
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
 
 # ─────────────────────────────────────
@@ -63,7 +61,6 @@ app.add_middleware(
     allow_origins=["http://localhost", "http://127.0.0.1"],
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Session-Id", "X-User-Text", "X-Answer"],
 )
 
 
