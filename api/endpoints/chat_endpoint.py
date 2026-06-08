@@ -1,16 +1,11 @@
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from crud.chat_crud import (
-    get_or_create_session,
-    create_message,
-    get_messages_by_session,
-)
-from services.llm_service import chat, stream_chat, strip_thinking
-from services.embedding_service import embed_text
+from services.chat_service import process_message
 from schemas.chat_schema import ChatRequest, ChatResponse
-from core.config import settings
 
 router = APIRouter()
 
@@ -23,7 +18,7 @@ router = APIRouter()
     response_model=ChatResponse,
     status_code=status.HTTP_200_OK,
 )
-def send_message(
+async def send_message(
     req: ChatRequest,
     db : Session = Depends(get_db),
 ):
@@ -38,68 +33,25 @@ def send_message(
     Returns:
         ChatResponse (session_id, answer)
     """
-    # ──────────────────────────────────────
-    # 1-1. 세션 판단 (시간 기반 자동 분기)
-    # ──────────────────────────────────────
-    session = get_or_create_session(db, req.session_id)
+    t_total = time.perf_counter()
 
-    # ──────────────────────────────────────
-    # 1-2. 대화 히스토리 구성
-    # ──────────────────────────────────────
-    messages = get_messages_by_session(
-        db,
-        session.session_id,
-        limit=settings.HISTORY_LIMIT,
-    )
-    history = [
-        {"role": msg.role, "content": msg.content}
-        for msg in messages
-    ]
-    history.append({"role": "user", "content": req.message})
-
-    # ──────────────────────────────────────
-    # 1-3. LLM 호출
-    # ──────────────────────────────────────
     try:
-        if settings.LLM_STREAMING:
-            tokens = stream_chat(history)
-            answer = strip_thinking("".join(tokens))
-        else:
-            answer = chat(history)
+        session, answer, timings = await process_message(
+            db,
+            req.session_id,
+            req.message,
+        )
     except RuntimeError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
 
-    # ──────────────────────────────────────
-    # 1-4. 임베딩 생성
-    # ──────────────────────────────────────
-    try:
-        user_embedding      = embed_text(req.message)
-        assistant_embedding = embed_text(answer)
-    except RuntimeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
-        )
-
-    # ──────────────────────────────────────
-    # 1-5. 메시지 저장
-    # ──────────────────────────────────────
-    create_message(
-        db,
-        session_id=session.session_id,
-        role="user",
-        content=req.message,
-        embedding=user_embedding,
-    )
-    create_message(
-        db,
-        session_id=session.session_id,
-        role="assistant",
-        content=answer,
-        embedding=assistant_embedding,
+    print(
+        f"[chat] LLM={timings['llm']}s "
+        f"임베딩={timings['embedding']}s "
+        f"DB={timings['db']}s "
+        f"전체={round(time.perf_counter() - t_total, 2)}s"
     )
 
     return ChatResponse(
