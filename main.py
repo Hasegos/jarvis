@@ -79,6 +79,11 @@ async def index(request: Request):
     return templates.TemplateResponse(request, "index.html")
 
 
+@app.get("/chat", include_in_schema=False)
+async def chat_page(request: Request):
+    """자비스 채팅 페이지 서빙."""
+    return templates.TemplateResponse(request, "chat.html")
+
 # ─────────────────────────────────────
 # 7. 헬스체크
 # ─────────────────────────────────────
