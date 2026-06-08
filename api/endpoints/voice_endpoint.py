@@ -1,14 +1,16 @@
-import base64
-import time
+import base64, time
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from core.logger import get_logger
 from db.session import get_db
-from services.chat_service import process_message
+from services.chat_service import process_message, run_summary_background
 from services.stt_service import transcribe_audio
 from services.tts_service import synthesize
+
+logger = get_logger("voice_endpoint")
 
 router = APIRouter()
 
@@ -21,7 +23,8 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def voice_chat(
-    session_id: int | None = None,
+    background_tasks  : BackgroundTasks,
+    session_id: int | None =  Form(None),
     file      : UploadFile  = File(...),
     db        : Session     = Depends(get_db),
 ):
@@ -50,7 +53,8 @@ async def voice_chat(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
-    print(f"[voice] STT={round(time.perf_counter() - t0, 2)}s")
+    logger.info("STT=%.2fs", round(time.perf_counter() - t0, 2))
+
 
     if not user_text:
         raise HTTPException(
@@ -84,16 +88,20 @@ async def voice_chat(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
-    print(
-        f"[voice] TTS={round(time.perf_counter() - t0, 2)}s "
-        f"LLM={timings['llm']}s "
-        f"임베딩={timings['embedding']}s "
-        f"DB={timings['db']}s "
-        f"전체={round(time.perf_counter() - t_total, 2)}s"
+    logger.info(
+        "TTS=%.2fs LLM=%.2fs 임베딩=%.2fs DB=%.2fs 전체=%.2fs",
+        round(time.perf_counter() - t0, 2),
+        timings['llm'], timings['embedding'], timings['db'],
+        round(time.perf_counter() - t_total, 2),
     )
 
     # ──────────────────────────────────────
-    # 1-4. JSON 반환
+    # 1-4. 백그라운드 요약 갱신
+    # ──────────────────────────────────────
+    background_tasks.add_task(run_summary_background, session.session_id)
+
+    # ──────────────────────────────────────
+    # 1-5. JSON 반환
     # ──────────────────────────────────────
     # HTTP 헤더는 latin-1만 허용 → 한국어 텍스트는 헤더 불가
     # 오디오를 base64로 인코딩해서 JSON에 포함
