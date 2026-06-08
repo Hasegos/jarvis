@@ -31,6 +31,7 @@ class ChatResponse(BaseModel):
     """
     session_id : int
     answer     : str
+    audio_b64  : Optional[str] = None
 
 
 # ─────────────────────
