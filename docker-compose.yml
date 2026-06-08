@@ -28,7 +28,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD}
       POSTGRES_DB: ${POSTGRESQL_DATABASE}
     ports:
-      - "5433:5432"
+      - "15432:5432"
     volumes:
       - jarvis_db_data:/var/lib/postgresql/data
     healthcheck:
