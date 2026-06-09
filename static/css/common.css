@@ -1,0 +1,55 @@
+/* ═════════════════
+   공통 기반 스타일
+════════════════════ */
+
+*, *::before, *::after {
+  margin: 0; 
+  padding: 0; 
+  box-sizing: border-box;
+}
+
+:root {
+  /* 시안 (JARVIS 주색) */
+  --cyan        : #4fc3f7;
+  --cyan-bright : #00e5ff;
+  --cyan-dim    : #0d2a4a;
+
+  /* 오렌지 (아크리액터 따뜻한 코어) */
+  --orange      : #ff6d3b;
+  --amber       : #ffa726;
+
+  /* 텍스트 & 배경 */
+  --text        : #b8d8ea;
+  --text-dim    : #4a6a7a;
+  --border      : #0a1e2e;
+  --bg-panel    : rgba(0, 6, 20, 0.92);
+
+  /* 호환 별칭 */
+  --accent      : var(--cyan);
+  --accent-dim  : var(--cyan-dim);
+  --text-dim-c  : var(--text-dim);
+
+  /* 폰트 */
+  --font        : 'Share Tech Mono', 'Courier New', monospace;
+  --font-ui     : 'Segoe UI', Tahoma, Geneva, sans-serif;
+  --font-d      : 'Orbitron', sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  font-family: var(--font);
+  background:
+      radial-gradient(ellipse 90% 60% at 18% 42%, rgba(60,0,140,.22)  0%, transparent 60%),
+      radial-gradient(ellipse 70% 80% at 82% 18%, rgba(0,50,130,.18)  0%, transparent 60%),
+      radial-gradient(ellipse 80% 55% at 58% 88%, rgba(35,0,110,.16)  0%, transparent 55%),
+      radial-gradient(ellipse 110% 90% at 50% 50%, rgba(0,8,35,.35)   0%, transparent 80%),
+      #00050f;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
