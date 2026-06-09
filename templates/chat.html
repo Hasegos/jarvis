@@ -1,98 +1,99 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS · Chat</title>
-    <link rel="stylesheet" href="/static/css/chat.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS · Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap">
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/chat.css">
 </head>
 <body>
-    <div class="page">
+  <!-- HUD 블록 -->
+  <div class="hud">
+    <canvas id="jarvisHUD" class="hud__canvas"></canvas>
+    <div id="hudStatus" class="hud__status hud__status--idle">● STANDBY</div>
+    <div class="hud__divider"></div>
+    <div class="hud__sys-info">
+      <div class="hud__sys-row">
+        <span class="hud__sys-key">NEURAL NET</span>
+        <span class="hud__sys-val hud__sys-val--blink">ONLINE</span>
+      </div>
+      <div class="hud__sys-row">
+        <span class="hud__sys-key">PROTOCOL</span>
+        <span class="hud__sys-val">JARVIS-4</span>
+      </div>
+      <div class="hud__sys-row">
+        <span class="hud__sys-key">ENCRYPTION</span>
+        <span class="hud__sys-val">AES-256</span>
+      </div>
+      <div class="hud__sys-row">
+        <span class="hud__sys-key">MEMORY</span>
+        <span class="hud__sys-val">ACTIVE</span>
+      </div>
+    </div>
+    <div class="hud__footer">
+      <span class="hud__footer-text">◈ SYSTEM READY</span>
+    </div>
+  </div>
 
-        <!-- ── 왼쪽: JARVIS HUD 패널 ── -->
-        <aside class="panel-left">
-            <canvas id="jarvisHUD"></canvas>
-            <div id="hudStatus" class="hud-status-idle">● STANDBY</div>
-            <div class="hud-divider"></div>
-            <div class="sys-info">
-                <div class="sys-row">
-                    <span class="sys-key">NEURAL NET</span>
-                    <span class="sys-val sys-blink">ONLINE</span>
-                </div>
-                <div class="sys-row">
-                    <span class="sys-key">PROTOCOL</span>
-                    <span class="sys-val">JARVIS-4</span>
-                </div>
-                <div class="sys-row">
-                    <span class="sys-key">ENCRYPTION</span>
-                    <span class="sys-val">AES-256</span>
-                </div>
-                <div class="sys-row">
-                    <span class="sys-key">MEMORY</span>
-                    <span class="sys-val">ACTIVE</span>
-                </div>
-            </div>
-            <div class="hud-divider"></div>
-            <div class="panel-footer">
-                <span class="footer-text">◈ SYSTEM READY</span>
-            </div>
-        </aside>
+  <!-- 채팅 레이아웃 -->
+  <div class="chat-layout">
 
-        <!-- ── 오른쪽: 채팅 패널 ── -->
-        <main class="panel-right">
+    <header class="chat-header">
+      <div class="chat-header__brand">
+        <h1 class="chat-header__title">J.A.R.V.I.S</h1>
+        <p class="chat-header__subtitle">Just A Rather Very Intelligent System</p>
+      </div>
+      <span id="chatSessionLabel" class="chat-header__session"></span>
+    </header>
 
-            <header class="chat-header">
-                <div class="header-brand">
-                    <h1>J.A.R.V.I.S</h1>
-                    <p class="subtitle">Just A Rather Very Intelligent System</p>
-                </div>
-                <span id="chatSessionLabel" class="session-label"></span>
-            </header>
+    <div id="chatBox" class="chat-messages"></div>
 
-            <div class="chat-box" id="chatBox"></div>
-
-            <!-- 생각중 파동 (jarvisHUD.js가 active 클래스 제어) -->
-            <div id="thinkingWave">
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <span class="wave-label">◈ JARVIS COMPUTING...</span>
-            </div>
-
-            <div class="input-area">
-                <div class="text-input-row">
-                    <a class="back-btn" href="/">← MAP</a>
-                    <textarea
-                        id="textInput"
-                        rows="1"
-                        placeholder="메시지를 입력하세요..."
-                        autocomplete="off"
-                    ></textarea>
-                    <button id="sendBtn">전송</button>
-                </div>
-                <div class="voice-row">
-                    <button id="voiceBtn" class="voice-btn">
-                        <span id="voiceBtnText">🎤 음성 입력</span>
-                    </button>
-                    <span id="voiceStatus" class="voice-status"></span>
-                </div>
-            </div>
-
-        </main>
-
+    <!-- 생각중 파동 -->
+    <div id="thinkingWave" class="thinking-wave">
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <div class="thinking-wave__bar"></div>
+      <span class="thinking-wave__label">◈ JARVIS COMPUTING...</span>
     </div>
 
-    <script src="/static/js/jarvisHUD.js"></script>
-    <script src="/static/js/chat.js"></script>
-    <script src="/static/js/chatInput.js"></script>
+    <div class="chat-input">
+      <div class="chat-input__row">
+        <a id="backBtn" class="chat-input__back" href="/">← MAP</a>
+        <textarea
+          id="textInput"
+          class="chat-input__textarea"
+          rows="1"
+          placeholder="메시지를 입력하세요..."
+          autocomplete="off"
+        ></textarea>
+        <button id="sendBtn" class="chat-input__btn">전송</button>
+      </div>
+      <div class="chat-input__voice-row">
+        <button id="voiceBtn" class="chat-input__btn chat-input__voice-btn">
+          <span id="voiceBtnText">🎤 음성 입력</span>
+        </button>
+        <span id="voiceStatus" class="chat-input__voice-status"></span>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/jarvisHUD.js"></script>
+  <script src="/static/js/chat.js"></script>
+  <script src="/static/js/chatInput.js"></script>
 </body>
 </html>
