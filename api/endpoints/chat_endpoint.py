@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from db.session import get_db
-from services.chat_service import process_message
 from schemas.chat_schema import ChatRequest, ChatResponse
 from models.session_model import Session as ChatSession
 from services.tts_service import synthesize

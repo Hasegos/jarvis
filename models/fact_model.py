@@ -25,8 +25,8 @@ class Fact(Base):
     category   : Mapped[Optional[str]]      = mapped_column(String(20), nullable=True)
     embedding  : Mapped[list[float]]        = mapped_column(Vector(1024), nullable=False)
     is_active  : Mapped[Optional[bool]]     = mapped_column(Boolean, server_default="true")
-    created_at : Mapped[datetime]           = mapped_column(TIMESTAMP, nullable=False, server_default=func.now())
-    updated_at : Mapped[Optional[datetime]] = mapped_column(TIMESTAMP, nullable=True)
+    created_at : Mapped[datetime]           = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at : Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # relationships
     message : Mapped["Message"] = relationship(back_populates="facts")

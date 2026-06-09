@@ -20,6 +20,8 @@ from core.constant import THINKING_KEYWORDS, THINKING_LENGTH_THRESHOLD
 
 logger = get_logger("chat_service")
 
+SUMMARY_EVERY_N_TURNS = 2
+
 
 # ─────────────────────────────────────
 # 1. 세션 요약 백그라운드 실행
@@ -29,6 +31,7 @@ def run_summary_background(session_id: int) -> None:
     세션의 전체 대화를 한 단어로 요약해 DB에 저장한다.
 
     자체 DB 세션을 생성하므로 BackgroundTasks에서 안전하게 실행된다.
+    비용 절감을 위해 매 메시지가 아니라 SUMMARY_EVERY_N_TURNS 턴마다 한 번만 실행한다.
 
     Args:
         session_id: 요약할 세션 PK
@@ -41,7 +44,15 @@ def run_summary_background(session_id: int) -> None:
         logger.debug("메시지 조회: session=%d count=%d", session_id, len(messages))
         if not messages:
             return
-        
+
+        # ──────────────────────────────────────
+        # 1-1. 요약 주기 게이트 (비용 절감)
+        # ──────────────────────────────────────
+        assistant_turns = sum(1 for m in messages if m.role == "assistant")
+        if assistant_turns % SUMMARY_EVERY_N_TURNS != 1:
+            logger.debug("요약 스킵: session=%d turns=%d", session_id, assistant_turns)
+            return
+
         history = [{"role": m.role, "content": m.content} for m in messages]
         summary = generate_summary(history)
         logger.debug("summary 생성 결과: session=%d summary=%r", session_id, summary)

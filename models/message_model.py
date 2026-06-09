@@ -22,7 +22,7 @@ class Message(Base):
     role       : Mapped[str]                = mapped_column(String(20), nullable=False)
     content    : Mapped[str]                = mapped_column(Text, nullable=False)
     embedding  : Mapped[list[float]]        = mapped_column(Vector(1024), nullable=False)
-    created_at : Mapped[datetime]           = mapped_column(TIMESTAMP, nullable=False, server_default=func.now())
+    created_at : Mapped[datetime]           = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     # relationships
     session : Mapped["Session"] = relationship(back_populates="messages")

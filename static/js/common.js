@@ -20,13 +20,14 @@ const API_ENDPOINTS = Object.freeze({
 /**
  * 날짜 문자열을 Date 객체로 파싱합니다.
  * UTC 접미사(Z)가 없으면 자동으로 추가합니다.
- * 
+ *
  * @param {string|null} d - ISO 8601 날짜 문자열
  * @returns {Date|null} 파싱된 Date, 입력이 falsy 이면 null
  */
 function parseDate(d) {
   if (!d) return null;
-  return new Date(d.endsWith('Z') ? d : d + 'Z');
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(d);
+  return new Date(hasTz ? d : d + 'Z');
 }
 
 /**
