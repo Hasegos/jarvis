@@ -81,8 +81,10 @@ async def voice_chat(
     # 1-3. TTS — 텍스트 → 음성
     # ──────────────────────────────────────
     t0 = time.perf_counter()
+    audio_b64 = None
     try:
         tts_bytes = await synthesize(answer)
+        audio_b64 = base64.b64encode(tts_bytes).decode("utf-8")
     except RuntimeError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -109,5 +111,5 @@ async def voice_chat(
         "session_id" : session.session_id,
         "user_text"  : user_text,
         "answer"     : answer,
-        "audio_b64"  : base64.b64encode(tts_bytes).decode("utf-8"),
+        "audio_b64"  : audio_b64,
     })
