@@ -1,213 +1,277 @@
-// ═══════════════════════════════════════════════════════════════
-// 1. 세션 ID — URL ?id= 파라미터에서 읽기
-// ═══════════════════════════════════════════════════════════════
-const params = new URLSearchParams(window.location.search);
-const rawId  = params.get('id');
-let currentSessionId = (rawId && rawId !== 'new') ? parseInt(rawId) : null;
+/**
+ * 채팅 페이지
+ */
+'use strict';
 
+/**
+ * 1. 상수 & 상태
+ */
+const params           = new URLSearchParams(window.location.search);
+const rawId            = params.get('id');
+let   currentSessionId = (rawId && rawId !== 'new') ? parseInt(rawId, 10) : null;
 
-// ═══════════════════════════════════════════════════════════════
-// 2. API 상수
-// ═══════════════════════════════════════════════════════════════
-const API = {
-    chat    : '/api/v1/chat',
-    voice   : '/api/v1/voice',
-    messages: (id) => `/api/v1/chat/sessions/${id}/messages`,
-    sessions: '/api/v1/chat/sessions',
-};
+// BEM 클래스명 상수 (CSS와 단일 소스)
+const CSS = Object.freeze({
+  MSG_ITEM      : 'chat-messages__item',
+  MSG_USER      : 'chat-messages__item--user',
+  MSG_ASSISTANT : 'chat-messages__item--assistant',
+  VOICE_REC     : 'chat-input__voice-btn--recording',
+});
 
+/**
+ * 2. DOM 참조 캐시 — init 1회만 조회
+ */
+const dom = {};
 
-// ═══════════════════════════════════════════════════════════════
-// 3. 세션 로드 (기존 세션이면 메시지 복원)
-// ═══════════════════════════════════════════════════════════════
-async function loadSession() {
-    if (!currentSessionId) {
-        document.getElementById('chatSessionLabel').textContent = 'NEW SESSION';
-        return;
-    }
-
-    document.getElementById('chatSessionLabel').textContent = `SESSION #${currentSessionId}`;
-
-    try {
-        const [messages, sessions] = await Promise.all([
-            fetch(API.messages(currentSessionId)).then(r => r.json()),
-            fetch(API.sessions).then(r => r.json()),
-        ]);
-
-        messages.forEach(m => addMessage(m.role, m.content));
-
-        const s = sessions.find(s => s.session_id === currentSessionId);
-        if (s?.summary) {
-            document.getElementById('chatSessionLabel').textContent = `${s.summary} · #${currentSessionId}`;
-        }
-    } catch (e) {
-        console.error('세션 복원 실패', e);
-    }
+function initDom() {
+  dom.chatBox      = document.getElementById('chatBox');
+  dom.sendBtn      = document.getElementById('sendBtn');
+  dom.voiceBtn     = document.getElementById('voiceBtn');
+  dom.voiceBtnText = document.getElementById('voiceBtnText');
+  dom.voiceStatus  = document.getElementById('voiceStatus');
+  dom.textInput    = document.getElementById('textInput');
+  dom.sessionLabel = document.getElementById('chatSessionLabel');
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-// 4. 채팅 UI
-// ═══════════════════════════════════════════════════════════════
+/**
+ * 3. UI 헬퍼
+ * 
+ * @param {*} role 
+ * @param {*} text 
+ */
 function addMessage(role, text) {
-    const chatBox = document.getElementById('chatBox');
-    const div     = document.createElement('div');
-    div.className   = `message ${role}`;
-    div.textContent = text;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
+  const div       = document.createElement('div');
+  div.className   = `${CSS.MSG_ITEM} ${role === 'user' ? CSS.MSG_USER : CSS.MSG_ASSISTANT}`;
+  div.textContent = text;   // textContent → XSS 방지
+  dom.chatBox.appendChild(div);
+  dom.chatBox.scrollTop = dom.chatBox.scrollHeight;
 }
 
-function setLoading(loading) {
-    document.getElementById('sendBtn').disabled   = loading;
-    document.getElementById('voiceBtn').disabled  = loading;
-    document.getElementById('textInput').disabled = loading;
+/**
+ * 전송·음성 버튼과 입력창의 비활성화 상태를 설정합니다.
+ * 
+ * @param {boolean} on - true 이면 비활성화 (요청 중), false 이면 활성화
+ */
+function setLoading(on) {
+  dom.sendBtn.disabled   = on;
+  dom.voiceBtn.disabled  = on;
+  dom.textInput.disabled = on;
 }
 
-// ──────────────────────────────────────
-// 4-1. 세션 ID 갱신 (새 세션 생성 시)
-// ──────────────────────────────────────
+/**
+ * 헤더의 세션 레이블 텍스트를 업데이트합니다.
+ * 
+ * @param {string} text - 표시할 레이블 문자열
+ */
+function setSessionLabel(text) {
+  if (dom.sessionLabel) dom.sessionLabel.textContent = text;
+}
+
+/**
+ * 현재 세션 ID를 갱신하고 URL·레이블을 동기화합니다.
+ * 새 채팅에서 첫 응답 후 서버가 발급한 ID를 반영할 때 사용합니다.
+ * 
+ * @param {number} newId - 서버에서 받은 세션 ID
+ * @returns {void}
+ */
 function updateSessionId(newId) {
-    if (!newId || newId === currentSessionId) return;
-    currentSessionId = newId;
-    history.replaceState(null, '', `/chat?id=${newId}`);
-    document.getElementById('chatSessionLabel').textContent = `SESSION #${newId}`;
+  if (!newId || newId === currentSessionId) return;
+  currentSessionId = newId;
+  history.replaceState(null, '', `/chat?id=${newId}`);
+  setSessionLabel(`SESSION #${newId}`);
 }
 
+/**
+ * 4. 세션 로드 (기존 세션 메시지 복원)
+ * 
+ * @returns 
+ */
+async function loadSession() {
+  if (!currentSessionId) {
+    setSessionLabel('NEW SESSION');
+    return;
+  }
 
-// ═══════════════════════════════════════════════════════════════
-// 5. 텍스트 전송
-// ═══════════════════════════════════════════════════════════════
-async function sendText() {
-    const input   = document.getElementById('textInput');
-    const message = input.value.trim();
-    if (!message) return;
+  setSessionLabel(`SESSION #${currentSessionId}`);
 
-    input.value = '';
-    addMessage('user', message);
-    setLoading(true);
+  try {
+    const [messages, sessions] = await Promise.all([
+      apiFetch(API_ENDPOINTS.messages(currentSessionId)),
+      apiFetch(API_ENDPOINTS.sessions),
+    ]);
 
-    try {
-        const res = await fetch(API.chat, {
-            method : 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body   : JSON.stringify({ session_id: currentSessionId, message }),
-        });
-        if (!res.ok) throw new Error(await res.text());
+    messages.forEach(m => addMessage(m.role, m.content));
 
-        const data = await res.json();
-        updateSessionId(data.session_id);
-        addMessage('assistant', data.answer);
-        if (data.audio_b64) await playAudio(data.audio_b64);
-
-    } catch (e) {
-        addMessage('assistant', '오류가 발생했습니다. 다시 시도해 주세요.');
-        console.error(e);
-    } finally {
-        setLoading(false);
+    const found = sessions.find(s => s.session_id === currentSessionId);
+    if (found?.summary) {
+      setSessionLabel(`${found.summary} · #${currentSessionId}`);
     }
+  } catch (e) {
+    console.error('세션 복원 실패', e);
+  }
 }
 
+/**
+ * 5. 텍스트 전송
+ * 
+ * @returns 
+ */
+async function sendText() {
+  const message = dom.textInput.value.trim();
+  if (!message) return;
 
-// ═══════════════════════════════════════════════════════════════
-// 6. 음성 녹음
-// ═══════════════════════════════════════════════════════════════
+  dom.textInput.value = '';
+  addMessage('user', message);
+  setLoading(true);
+
+  try {
+    const data = await apiFetch(API_ENDPOINTS.chat, {
+      method: 'POST',
+      body  : JSON.stringify({ session_id: currentSessionId, message }),
+    });
+
+    updateSessionId(data.session_id);
+    addMessage('assistant', data.answer);
+    if (data.audio_b64) await playAudio(data.audio_b64);
+
+  } catch (e) {
+    const msg = e instanceof ApiError
+      ? `서버 오류 (${e.status}). 다시 시도해 주세요.`
+      : '연결 오류가 발생했습니다. 다시 시도해 주세요.';
+    addMessage('assistant', msg);
+    console.error('sendText 실패:', e);
+  } finally {
+    setLoading(false);
+  }
+}
+
+/**
+ * 6. 음성 녹음
+ */
 let mediaRecorder = null;
 let isRecording   = false;
 
+/**
+ * 음성 녹음 토글 — 녹음 중이면 중지, 아니면 시작합니다.
+ */
 async function toggleVoice() {
-    if (isRecording) stopRecording();
-    else             await startRecording();
+  if (isRecording) stopRecording();
+  else             await startRecording();
 }
 
+/**
+ * 마이크 스트림을 열고 MediaRecorder 녹음을 시작합니다.
+ * 녹음 종료 시 자동으로 sendVoice 를 호출합니다.
+ */
 async function startRecording() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const chunks = [];
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = e => chunks.push(e.data);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => chunks.push(e.data);
 
-        // ──────────────────────────────────────
-        // 6-1. 녹음 완료 → 서버 전송
-        // ──────────────────────────────────────
-        mediaRecorder.onstop = async () => {
-            const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
-            stream.getTracks().forEach(t => t.stop());
-            await sendVoice(blob);
-        };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      await sendVoice(new Blob(chunks, { type: mediaRecorder.mimeType }));
+    };
 
-        mediaRecorder.start();
-        isRecording = true;
-        document.getElementById('voiceBtn').classList.add('recording');
-        document.getElementById('voiceBtnText').textContent = '⏹ 녹음 중지';
-        document.getElementById('voiceStatus').textContent  = '녹음 중...';
-    } catch (e) {
-        document.getElementById('voiceStatus').textContent = '마이크 권한이 필요합니다.';
-        console.error(e);
-    }
+    mediaRecorder.start();
+    isRecording = true;
+    dom.voiceBtn.classList.add(CSS.VOICE_REC);
+    dom.voiceBtnText.textContent = '⏹ 녹음 중지';
+    dom.voiceStatus.textContent  = '녹음 중...';
+  } catch (e) {
+    dom.voiceStatus.textContent = '마이크 권한이 필요합니다.';
+    console.error('마이크 접근 실패:', e);
+  }
 }
 
+/**
+ * 진행 중인 녹음을 중지합니다.
+ * MediaRecorder.stop() 호출 → onstop 핸들러에서 sendVoice 가 이어받습니다.
+ * 
+ * @returns {void}
+ */
 function stopRecording() {
-    if (mediaRecorder && isRecording) {
-        mediaRecorder.stop();
-        isRecording = false;
-        document.getElementById('voiceBtn').classList.remove('recording');
-        document.getElementById('voiceBtnText').textContent = '🎤 음성 입력';
-        document.getElementById('voiceStatus').textContent  = '처리 중...';
-    }
+  if (!mediaRecorder || !isRecording) return;
+  mediaRecorder.stop();
+  isRecording = false;
+  dom.voiceBtn.classList.remove(CSS.VOICE_REC);
+  dom.voiceBtnText.textContent = '🎤 음성 입력';
+  dom.voiceStatus.textContent  = '처리 중...';
 }
 
+/**
+ * 녹음된 오디오 Blob을 서버에 전송하고 응답을 화면에 표시합니다.
+ * 
+ * @param {Blob} blob - MediaRecorder가 생성한 오디오 Blob
+ */
 async function sendVoice(blob) {
-    setLoading(true);
-    try {
-        const ext  = blob.type.includes('webm') ? 'webm' : 'ogg';
-        const form = new FormData();
-        form.append('file', blob, `audio.${ext}`);
-        if (currentSessionId) form.append('session_id', String(currentSessionId));
+  setLoading(true);
+  try {
+    const ext  = blob.type.includes('webm') ? 'webm' : 'ogg';
+    const form = new FormData();
+    form.append('file', blob, `audio.${ext}`);
+    if (currentSessionId) form.append('session_id', String(currentSessionId));
 
-        const res = await fetch(API.voice, { method: 'POST', body: form });
-        if (!res.ok) throw new Error(await res.text());
+    const data = await apiFetch(API_ENDPOINTS.voice, { method: 'POST', body: form });
 
-        const data = await res.json();
-        updateSessionId(data.session_id);
-        if (data.user_text) addMessage('user',      data.user_text);
-        if (data.answer)    addMessage('assistant', data.answer);
-        if (data.audio_b64) await playAudio(data.audio_b64);
+    updateSessionId(data.session_id);
+    if (data.user_text) addMessage('user',      data.user_text);
+    if (data.answer)    addMessage('assistant', data.answer);
+    if (data.audio_b64) await playAudio(data.audio_b64);
 
-    } catch (e) {
-        addMessage('assistant', '오류가 발생했습니다. 다시 시도해 주세요.');
-        console.error(e);
-    } finally {
-        setLoading(false);
-        document.getElementById('voiceStatus').textContent = '';
-    }
+  } catch (e) {
+    const msg = e instanceof ApiError
+      ? `음성 처리 오류 (${e.status}). 다시 시도해 주세요.`
+      : '음성 연결 오류가 발생했습니다.';
+    addMessage('assistant', msg);
+    console.error('sendVoice 실패:', e);
+  } finally {
+    setLoading(false);
+    dom.voiceStatus.textContent = '';
+  }
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-// 7. 오디오 재생
-// ═══════════════════════════════════════════════════════════════
+/**
+ * 7. 오디오 재생
+ * 
+ * @param {*} b64 
+ */
 async function playAudio(b64) {
-    const bytes = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)));
-    const url   = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
-    const audio = new Audio(url);
-    audio.onended = () => URL.revokeObjectURL(url);
-    await audio.play();
+  const bytes = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)));
+  const url   = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+  const audio = new Audio(url);
+  audio.onended = () => URL.revokeObjectURL(url);
+  await audio.play();
 }
 
+/**
+ * 8. 이벤트 바인딩
+ */
+function bindEvents() {
+  dom.sendBtn.addEventListener('click', sendText);
+  dom.voiceBtn.addEventListener('click', toggleVoice);
+  dom.textInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendText();
+    }
+  });
+}
 
-// ═══════════════════════════════════════════════════════════════
-// 8. 이벤트 바인딩
-// ═══════════════════════════════════════════════════════════════
-document.getElementById('sendBtn').addEventListener('click', sendText);
-document.getElementById('voiceBtn').addEventListener('click', toggleVoice);
-document.getElementById('textInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
-});
+/**
+ * 9. 초기화
+ */
+function init() {
+  initDom();
+  bindEvents();
+  loadSession();
+  dom.textInput.focus();
+}
 
-
-// ═══════════════════════════════════════════════════════════════
-// 9. 초기화
-// ═══════════════════════════════════════════════════════════════
-loadSession();
-document.getElementById('textInput').focus();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
