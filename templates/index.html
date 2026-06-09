@@ -1,41 +1,103 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS</title>
-    <link rel="stylesheet" href="/static/css/graph.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J.A.R.V.I.S</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap">
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/graph.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+  <!-- 사이드바 -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar__brand">
+      <span class="sidebar__brand-icon">◈</span>
+      <span class="sidebar__brand-text">J.A.R.V.I.S</span>
+    </div>
+    <div class="sidebar__sysbar">
+      <span><span class="sidebar__sysbar-dot"></span>ONLINE</span>
+      <span>NEURAL NET</span>
+      <span>v4.0</span>
+    </div>
+    <a class="sidebar__new-btn" href="/chat">
+      <span class="sidebar__new-btn-icon">+</span> 새 대화
+    </a>
+    <div class="sidebar__divider"></div>
+    <div id="sidebarSessions" class="sidebar__sessions">
+      <div class="sidebar__loading">로딩 중...</div>
+    </div>
+    <div class="sidebar__footer">STARK INDUSTRIES · JARVIS SYSTEM</div>
+  </aside>
 
-    <!-- 사이드바 -->
-    <aside id="sidebar">
-        <div class="sidebar-brand">
-            <span class="sidebar-brand-icon">◈</span>
-            <span class="sidebar-brand-text">J.A.R.V.I.S</span>
-        </div>
-        <a class="sidebar-new-btn" href="/chat">
-            <span>+</span> 새 대화
-        </a>
-        <div class="sidebar-divider"></div>
-        <div class="sidebar-sessions" id="sidebarSessions">
-            <div class="sidebar-loading">로딩 중...</div>
-        </div>
-    </aside>
+  <!-- 헤더 -->
+  <div id="graphHeader" class="graph-header">
+    <div class="graph-header__left">
+      <span class="graph-header__stat">SYS <span class="graph-header__stat-val">NOMINAL</span></span>
+    </div>
+    <div class="graph-header__center">
+      <span class="graph-header__title">J.A.R.V.I.S</span>
+      <span class="graph-header__sep"></span>
+      <span class="graph-header__subtitle">Just A Rather Very Intelligent System</span>
+    </div>
+    <div class="graph-header__right">
+      <span class="graph-header__hint">DRAG · R-DRAG PAN · SCROLL ZOOM · CLICK</span>
+    </div>
+  </div>
 
-    <!-- 헤더 바 (J.A.R.V.I.S 타이틀 고정) -->
-    <div id="graphHeader">
-        <span class="gh-title">J.A.R.V.I.S</span>
-        <span class="gh-sub">Just A Rather Very Intelligent System</span>
-        <span class="gh-hint">DRAG · RIGHT DRAG TO PAN · SCROLL ZOOM · CLICK NODE</span>
+  <!-- 그래프 캔버스 + HUD 오버레이 -->
+  <main id="graphMain" class="graph-main">
+    <canvas id="graphCanvas" class="graph-main__canvas"></canvas>
+
+    <!-- HUD 코너 브라켓 -->
+    <div class="hud-corner hud-corner--tl"></div>
+    <div class="hud-corner hud-corner--tr"></div>
+    <div class="hud-corner hud-corner--bl"></div>
+    <div class="hud-corner hud-corner--br"></div>
+
+    <!-- 현황 체킹 패널 (접기/펼치기) -->
+    <div id="statusPanel" class="status-panel">
+      <div id="spToggle" class="status-panel__header">
+        <span>◈ SYSTEM STATUS</span>
+        <span class="status-panel__arrow">▼</span>
+      </div>
+      <div id="spBody" class="status-panel__body">
+        <div class="status-panel__row">
+          <span class="status-panel__key">SESSIONS</span>
+          <span id="spTotal" class="status-panel__val">—</span>
+        </div>
+        <div class="status-panel__row">
+          <span class="status-panel__key">TODAY</span>
+          <span id="spToday" class="status-panel__val">—</span>
+        </div>
+        <div class="status-panel__row">
+          <span class="status-panel__key">THIS WEEK</span>
+          <span id="spWeek" class="status-panel__val">—</span>
+        </div>
+        <div class="status-panel__divider"></div>
+        <div class="status-panel__row">
+          <span class="status-panel__key">LAST ACTIVE</span>
+          <span id="spLast" class="status-panel__val">—</span>
+        </div>
+        <div class="status-panel__row">
+          <span class="status-panel__key">NEURAL NET</span>
+          <span class="status-panel__val status-panel__val--online">ONLINE</span>
+        </div>
+      </div>
     </div>
 
-    <!-- 그래프 캔버스 영역 -->
-    <main id="graphMain">
-        <canvas id="graphCanvas"></canvas>
-    </main>
+    <!-- 하단 상태 바 -->
+    <div class="graph-statusbar">
+      <span><span class="graph-statusbar__dot"></span>ARC REACTOR ONLINE</span>
+      <span>MEMORY BANK ACTIVE</span>
+      <span>ENCRYPTION AES-256</span>
+    </div>
+  </main>
 
-    <script src="/static/js/graph.js"></script>
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/graph.js"></script>
 </body>
 </html>
