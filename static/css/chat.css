@@ -1,0 +1,398 @@
+/* ─────────────────────────────────────────────
+   Chat Page — JARVIS Terminal Interface
+───────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── 우주 배경 ── */
+body {
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, sans-serif;
+    color: #c8d8e8;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background:
+        radial-gradient(ellipse 80% 60% at 70% 22%, rgba(45,0,110,.22) 0%,transparent 58%),
+        radial-gradient(ellipse 70% 70% at 12% 80%, rgba(0,35,100,.18) 0%,transparent 58%),
+        radial-gradient(ellipse 90% 50% at 48% 62%, rgba(25,0,90,.14) 0%,transparent 55%),
+        radial-gradient(ellipse 110% 90% at 50% 50%, rgba(0,5,30,.3) 0%,transparent 80%),
+        #01010a;
+}
+
+/* 별빛 dot */
+body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+        radial-gradient(1px 1px at  8% 12%, rgba(180,210,255,.7) 0%,transparent 100%),
+        radial-gradient(1px 1px at 23%  5%, rgba(255,255,255,.5) 0%,transparent 100%),
+        radial-gradient(1px 1px at 45% 18%, rgba(200,230,255,.6) 0%,transparent 100%),
+        radial-gradient(1px 1px at 67%  8%, rgba(255,255,255,.4) 0%,transparent 100%),
+        radial-gradient(1px 1px at 89% 15%, rgba(180,200,255,.5) 0%,transparent 100%),
+        radial-gradient(1px 1px at  5% 35%, rgba(200,220,255,.4) 0%,transparent 100%),
+        radial-gradient(1px 1px at 78% 32%, rgba(255,255,255,.55) 0%,transparent 100%),
+        radial-gradient(1px 1px at 56% 70%, rgba(255,255,255,.3) 0%,transparent 100%),
+        radial-gradient(1px 1px at 92% 62%, rgba(200,230,255,.45) 0%,transparent 100%),
+        radial-gradient(2px 2px at 82% 78%, rgba(150,200,255,.35) 0%,transparent 100%),
+        radial-gradient(2px 2px at 28% 82%, rgba(200,180,255,.3) 0%,transparent 100%);
+}
+
+/* ── 전체 페이지 레이아웃 (flex 2-패널) ── */
+.page {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+}
+
+/* ════════════════════════════════════════
+   왼쪽 HUD 패널
+════════════════════════════════════════ */
+.panel-left {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 14px 16px;
+    gap: 10px;
+    border-right: 1px solid rgba(79,195,247,.2);
+    background: rgba(0,4,18,.6);
+    backdrop-filter: blur(6px);
+    position: relative;
+    overflow: hidden;
+}
+
+/* 코너 브라켓 장식 */
+.panel-left::before {
+    content: ''; position: absolute;
+    top: 8px; left: 8px; width: 18px; height: 18px;
+    border-top: 2px solid rgba(79,195,247,.5);
+    border-left: 2px solid rgba(79,195,247,.5);
+}
+.panel-left::after {
+    content: ''; position: absolute;
+    bottom: 8px; right: 8px; width: 18px; height: 18px;
+    border-bottom: 2px solid rgba(79,195,247,.5);
+    border-right: 2px solid rgba(79,195,247,.5);
+}
+
+/* HUD 캔버스 */
+#jarvisHUD { display: block; }
+
+/* HUD 상태 텍스트 */
+#hudStatus {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    padding: 3px 10px;
+    border-radius: 3px;
+    transition: color 0.3s;
+}
+.hud-status-idle     { color: rgba(79,195,247,.5); }
+.hud-status-thinking { color: #f59e0b; animation: blink .8s ease-in-out infinite; }
+.hud-status-speaking { color: #4fc3f7; text-shadow: 0 0 10px rgba(79,195,247,.8); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* 구분선 */
+.hud-divider {
+    width: 90%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(79,195,247,.3), transparent);
+    flex-shrink: 0;
+}
+
+/* 시스템 정보 */
+.sys-info {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 8px;
+}
+.sys-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+}
+.sys-key { color: rgba(79,195,247,.55); letter-spacing: 0.04em; }
+.sys-val { color: rgba(79,195,247,.88); letter-spacing: 0.1em; font-weight: 600; }
+.sys-blink { animation: sysFlicker 4s ease-in-out infinite; }
+@keyframes sysFlicker { 0%,96%,100%{opacity:.78} 97%{opacity:.2} 98%{opacity:.78} 99%{opacity:.3} }
+
+/* 패널 하단 */
+.panel-footer {
+    margin-top: auto;
+    padding-top: 4px;
+}
+.footer-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem;
+    color: rgba(79,195,247,.32);
+    letter-spacing: 0.12em;
+}
+
+/* ════════════════════════════════════════
+   오른쪽 채팅 패널
+════════════════════════════════════════ */
+.panel-right {
+    flex: 1;
+    min-width: 0;      /* 반응형: flex 자식이 내용 크기 이하로 줄어들게 허용 */
+    display: flex;
+    flex-direction: column;
+    padding: 18px 22px 14px 18px;
+    gap: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+/* 우측 상단 코너 브라켓 */
+.panel-right::before {
+    content: ''; position: absolute;
+    top: 8px; right: 8px; width: 18px; height: 18px;
+    border-top: 2px solid rgba(79,195,247,.3);
+    border-right: 2px solid rgba(79,195,247,.3);
+    z-index: 5;
+}
+
+/* 스캔라인 — panel-right::after (스크롤 밖 고정 위치)
+   panel-right는 overflow:hidden이고 스크롤 안 됨
+   → 사용자가 어디 있든 화면을 쓸고 지나감 */
+.panel-right::after {
+    content: ''; position: absolute;
+    left: 0; right: 0;
+    height: 120px; top: 0;
+    background: linear-gradient(
+        transparent 0%,
+        rgba(79,195,247,.05) 35%,
+        rgba(79,195,247,.10) 50%,
+        rgba(79,195,247,.05) 65%,
+        transparent 100%
+    );
+    pointer-events: none; z-index: 3;
+    animation: scanLine 9s linear infinite;
+    will-change: transform;
+}
+@keyframes scanLine {
+    0%   { transform: translateY(-120px); opacity: 0; }
+    5%   { opacity: 1; }
+    88%  { opacity: 1; }
+    100% { transform: translateY(100vh);  opacity: 0; }
+}
+
+/* 헤더 */
+.chat-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(79,195,247,.2);
+    flex-shrink: 0;
+}
+.header-brand h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.55rem;
+    font-weight: 900;
+    color: #4fc3f7;
+    letter-spacing: 0.25em;
+    text-shadow: 0 0 22px rgba(79,195,247,.45);
+    line-height: 1;
+}
+.subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.82rem;
+    color: rgba(79,195,247,.6);
+    letter-spacing: 0.12em;
+    margin-top: 5px;
+}
+.session-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.82rem;
+    color: rgba(79,195,247,.65);
+    letter-spacing: 0.1em;
+}
+
+/* ── 채팅 박스 ── */
+.chat-box {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 4px 8px 0;
+    position: relative;
+}
+.chat-box::-webkit-scrollbar { width: 3px; }
+.chat-box::-webkit-scrollbar-track { background: transparent; }
+.chat-box::-webkit-scrollbar-thumb { background: rgba(79,195,247,.28); border-radius: 2px; }
+
+/* ── JARVIS 생각중 파동 인디케이터 ── */
+#thinkingWave {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 2px;
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    transition: opacity 0.35s, height 0.35s;
+    flex-shrink: 0;
+}
+#thinkingWave.active {
+    opacity: 1;
+    height: 40px;
+    padding: 6px 2px;
+}
+.wave-bar {
+    width: 3px;
+    min-height: 4px;
+    background: linear-gradient(to top, rgba(79,195,247,.5), #4fc3f7);
+    border-radius: 2px;
+    animation: waveBar 0.75s ease-in-out infinite alternate;
+}
+.wave-bar:nth-child(1)  { animation-delay: 0.00s; }
+.wave-bar:nth-child(2)  { animation-delay: 0.07s; }
+.wave-bar:nth-child(3)  { animation-delay: 0.14s; }
+.wave-bar:nth-child(4)  { animation-delay: 0.21s; }
+.wave-bar:nth-child(5)  { animation-delay: 0.28s; }
+.wave-bar:nth-child(6)  { animation-delay: 0.35s; }
+.wave-bar:nth-child(7)  { animation-delay: 0.28s; }
+.wave-bar:nth-child(8)  { animation-delay: 0.21s; }
+.wave-bar:nth-child(9)  { animation-delay: 0.14s; }
+.wave-bar:nth-child(10) { animation-delay: 0.07s; }
+.wave-bar:nth-child(11) { animation-delay: 0.00s; }
+.wave-bar:nth-child(12) { animation-delay: 0.10s; }
+@keyframes waveBar {
+    from { height: 3px; }
+    to   { height: 24px; }
+}
+.wave-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    color: rgba(79,195,247,.75);
+    letter-spacing: 0.16em;
+    margin-left: 10px;
+    animation: waveLabelBlink .9s ease-in-out infinite;
+}
+@keyframes waveLabelBlink { 0%,100%{opacity:.75} 50%{opacity:.3} }
+
+/* ── 메시지 버블 (sci-fi terminal) ── */
+.message {
+    max-width: 74%;
+    min-width: 0;
+    padding: 10px 15px;
+    line-height: 1.68;
+    font-size: 1.0rem;
+    font-family: 'Segoe UI', Tahoma, Geneva, sans-serif;
+    position: relative;
+    word-wrap: break-word;        /* 긴 단어/코드 강제 줄바꿈 */
+    overflow-wrap: anywhere;      /* 어디서든 줄바꿈 허용 */
+    white-space: pre-wrap;        /* 코드 등 공백 유지하면서 줄바꿈 */
+}
+
+/* 사용자 메시지: 오른쪽 정렬, 파란 계열 */
+.message.user {
+    align-self: flex-end;
+    background: rgba(30, 69, 117, .95);
+    color: #f0f8ff;
+    border-radius: 8px 2px 8px 8px;
+    border-right: 3px solid #4fc3f7;
+}
+
+/* JARVIS 메시지: 왼쪽 정렬, 어두운 배경 + 시안 왼쪽 테두리 */
+.message.assistant {
+    align-self: flex-start;
+    background: rgba(4, 14, 32, .92);
+    color: #dce9f5;
+    border-radius: 2px 8px 8px 8px;
+    border-left: 3px solid rgba(79,195,247,.75);
+}
+
+/* ── 입력 영역 ── */
+.input-area {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+    padding-top: 10px;
+    border-top: 1px solid rgba(79,195,247,.2);
+}
+
+.text-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;  /* textarea 높이 변해도 버튼은 항상 하단 정렬 */
+}
+
+/* 뒤로가기 버튼 */
+a.back-btn, a.back-btn:visited,
+a.back-btn:hover, a.back-btn:active {
+    color: #4fc3f7;
+    text-decoration: none;
+    background: rgba(26,58,92,.75);
+    border: 1px solid rgba(79,195,247,.45);
+    border-radius: 4px;
+    padding: 9px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.82rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background .2s, border-color .2s;
+    letter-spacing: 0.04em;
+}
+a.back-btn:hover { background: rgba(26,74,108,.9); border-color: #4fc3f7; }
+
+/* 텍스트 입력 (textarea — 자동 줄바꿈) */
+textarea#textInput {
+    flex: 1;
+    min-height: 40px;
+    max-height: 180px;
+    background: rgba(4,12,32,.8);
+    border: 1px solid rgba(79,195,247,.28);
+    border-radius: 4px;
+    padding: 9px 14px;
+    color: #e0f0ff;
+    font-size: 0.95rem;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    outline: none;
+    resize: none;           /* 수동 리사이즈 핸들 숨김 */
+    overflow-y: auto;
+    line-height: 1.5;
+    transition: border-color .2s;
+    vertical-align: bottom;  /* 버튼과 하단 정렬 */
+}
+textarea#textInput:focus { border-color: #4fc3f7; box-shadow: 0 0 8px rgba(79,195,247,.18); }
+textarea#textInput::placeholder { color: rgba(79,195,247,.32); }
+
+/* 버튼 공통 */
+button {
+    background: rgba(26,58,92,.8);
+    border: 1px solid rgba(79,195,247,.45);
+    border-radius: 4px;
+    color: #4fc3f7;
+    padding: 9px 18px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.06em;
+    transition: all .2s;
+}
+button:hover   { background: rgba(26,74,108,.9); border-color: #4fc3f7; box-shadow: 0 0 8px rgba(79,195,247,.2); }
+button:disabled { opacity: .35; cursor: not-allowed; }
+
+/* 음성 영역 */
+.voice-row { display: flex; align-items: center; gap: 10px; }
+.voice-btn { width: 100%; padding: 10px; }
+.voice-btn.recording { background: rgba(58,26,26,.8); border-color: #ef5350; color: #ef5350; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+.voice-status { font-size: 0.75rem; color: rgba(79,195,247,.5); min-width: 80px; font-family: 'Share Tech Mono', monospace; }
