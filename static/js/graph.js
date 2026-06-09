@@ -754,8 +754,8 @@ function hideSession(id) {
 }
 
 /**
- * 숨김 목록에서 세션을 제거합니다
- * .
+ * 숨김 목록에서 세션을 제거합니다.
+ *
  * @param {number} id - 복원할 세션 ID
  */
 function restoreSession(id) {
@@ -823,7 +823,7 @@ function showRestoreModal() {
         const btn = document.createElement('button'); btn.className = CSS.RM_BTN;
         btn.textContent = '↩ 복원';
         btn.onclick = () => {
-            restoreSession(parseInt(item.dataset.id));
+            restoreSession(parseInt(item.dataset.id, 10));
             _lastSessionsJson = '';
             loadSessions();
             if (getHidden().size > 0) showRestoreModal();
