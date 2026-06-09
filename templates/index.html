@@ -4,45 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JARVIS</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/graph.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <div class="container">
 
-        <header>
-            <h1>J.A.R.V.I.S</h1>
-            <p class="subtitle">Just A Rather Very Intelligent System</p>
-        </header>
-
-        <!-- 대화 영역 -->
-        <div class="chat-box" id="chatBox"></div>
-
-        <!-- 입력 영역 -->
-        <div class="input-area">
-
-            <!-- 텍스트 입력 -->
-            <div class="text-input-row">
-                <input
-                    type="text"
-                    id="textInput"
-                    placeholder="메시지를 입력하세요..."
-                    autocomplete="off"
-                />
-                <button id="sendBtn">전송</button>
-            </div>
-
-            <!-- 음성 입력 -->
-            <div class="voice-row">
-                <button id="voiceBtn" class="voice-btn">
-                    <span id="voiceBtnText">🎤 음성 입력</span>
-                </button>
-                <span id="voiceStatus" class="voice-status"></span>
-            </div>
-
+    <!-- 사이드바 -->
+    <aside id="sidebar">
+        <div class="sidebar-brand">
+            <span class="sidebar-brand-icon">◈</span>
+            <span class="sidebar-brand-text">J.A.R.V.I.S</span>
         </div>
+        <a class="sidebar-new-btn" href="/chat">
+            <span>+</span> 새 대화
+        </a>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-sessions" id="sidebarSessions">
+            <div class="sidebar-loading">로딩 중...</div>
+        </div>
+    </aside>
 
+    <!-- 헤더 바 (J.A.R.V.I.S 타이틀 고정) -->
+    <div id="graphHeader">
+        <span class="gh-title">J.A.R.V.I.S</span>
+        <span class="gh-sub">Just A Rather Very Intelligent System</span>
+        <span class="gh-hint">DRAG · RIGHT DRAG TO PAN · SCROLL ZOOM · CLICK NODE</span>
     </div>
 
-    <script src="/static/js/jarvis.js"></script>
+    <!-- 그래프 캔버스 영역 -->
+    <main id="graphMain">
+        <canvas id="graphCanvas"></canvas>
+    </main>
+
+    <script src="/static/js/graph.js"></script>
 </body>
 </html>
