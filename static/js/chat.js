@@ -236,14 +236,27 @@ async function sendVoice(blob) {
 /**
  * 7. 오디오 재생
  * 
- * @param {*} b64 
+ * @param {string} b64 - base64 인코딩된 MP3 데이터
  */
 async function playAudio(b64) {
-  const bytes = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)));
-  const url   = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+  let url;
+  try {
+    const bytes = new Uint8Array(atob(b64).split('').map(c => c.charCodeAt(0)));
+    url = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+  } catch (e) {
+    console.error('오디오 디코딩 실패:', e);
+    return;
+  }
+
   const audio = new Audio(url);
   audio.onended = () => URL.revokeObjectURL(url);
-  await audio.play();
+
+  try {
+    await audio.play();
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    console.error('오디오 재생 실패:', e);
+  }
 }
 
 /**
