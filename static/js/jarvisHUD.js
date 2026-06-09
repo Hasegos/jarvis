@@ -1,0 +1,224 @@
+// ═══════════════════════════════════════════════════════════════
+//  J.A.R.V.I.S  ARC HUD  —  jarvisHUD.js
+// ═══════════════════════════════════════════════════════════════
+(function () {
+    'use strict';
+
+    const SIZE = 280;
+    let ctx = null;
+    let t   = 0;
+    let hudState = 'idle';
+
+    // 색 팔레트
+    const P  = [79,  195, 247];   // cyan #4fc3f7
+    const AC = [245, 158, 11 ];   // amber
+    const W  = [255, 255, 255];
+    const ca = (rgb, a) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
+
+    // 상태별 파라미터
+    const SP = {
+        idle    : { spd: 1.0, glow: 0.45, act: 0.15 },
+        thinking: { spd: 2.4, glow: 0.88, act: 0.65 },
+        speaking: { spd: 4.0, glow: 1.20, act: 1.00 },
+    };
+
+    // ── Canvas 초기화 (Retina 대응)
+    function initCtx() {
+        const cv = document.getElementById('jarvisHUD');
+        if (!cv) return false;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        cv.width  = SIZE * dpr;
+        cv.height = SIZE * dpr;
+        cv.style.width  = SIZE + 'px';
+        cv.style.height = SIZE + 'px';
+        ctx = cv.getContext('2d');
+        ctx.scale(dpr, dpr);
+        return true;
+    }
+
+    // ── 한 프레임 그리기
+    function draw() {
+        if (!ctx) return;
+        const S = SIZE, cx = S/2, cy = S/2;
+        const sp = SP[hudState] || SP.idle;
+        const R  = S * 0.43;
+
+        ctx.clearRect(0, 0, S, S);
+
+        // 1. 배경 방사형 글로우
+        const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.15);
+        bg.addColorStop(0,   ca(P, 0.08 * sp.glow));
+        bg.addColorStop(0.7, ca(P, 0.02 * sp.glow));
+        bg.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = bg; ctx.fillRect(0, 0, S, S);
+
+        // 2. 외부 기준 링
+        ctx.beginPath();
+        ctx.arc(cx, cy, R, 0, Math.PI*2);
+        ctx.strokeStyle = ca(P, 0.28); ctx.lineWidth = 1.5; ctx.stroke();
+
+        // 외부 두꺼운 후광 밴드
+        ctx.beginPath();
+        ctx.arc(cx, cy, R + 6, 0, Math.PI*2);
+        ctx.strokeStyle = ca(P, 0.10); ctx.lineWidth = 10; ctx.stroke();
+
+        // 3. 틱마크 (외부, 천천히 회전)
+        const tickOff = t * sp.spd * 0.16;
+        for (let i = 0; i < 90; i++) {
+            const ang = (i/90)*Math.PI*2 + tickOff;
+            const co  = Math.cos(ang), si = Math.sin(ang);
+            const isL = i % 15 === 0;
+            const isM = i %  5 === 0;
+            const len = isL ? 16 : (isM ? 9 : 4);
+            const opa = isL ? 1.0 : (isM ? 0.55 : 0.22);
+            ctx.beginPath();
+            ctx.moveTo(cx + co*(R-len), cy + si*(R-len));
+            ctx.lineTo(cx + co*R,       cy + si*R);
+            ctx.strokeStyle = ca(P, opa); ctx.lineWidth = isL ? 2.5 : 1; ctx.stroke();
+        }
+
+        // 4. 앰버 액센트 아크 (정회전, 빠름)
+        const aAng = t * sp.spd * 0.5 - Math.PI/2;
+        const aLen = 0.38 + Math.sin(t*1.4)*0.12*sp.act;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R - 7, aAng, aAng + aLen);
+        ctx.strokeStyle = ca(AC, 0.95 * sp.glow);
+        ctx.lineWidth = 6; ctx.shadowColor = ca(AC, 0.8); ctx.shadowBlur = 12;
+        ctx.stroke(); ctx.shadowBlur = 0;
+
+        // 반대쪽 작은 앰버 아크
+        ctx.beginPath();
+        ctx.arc(cx, cy, R - 7, aAng+Math.PI+0.6, aAng+Math.PI+1.0);
+        ctx.strokeStyle = ca(AC, 0.55 * sp.glow); ctx.lineWidth = 3; ctx.stroke();
+
+        // 5. 시안 진행 아크 (역회전)
+        const cAng = -(t * sp.spd * 0.26) + Math.PI*0.6;
+        const cLen = (0.5 + sp.act * 0.55) * Math.PI;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R - 16, cAng, cAng + cLen);
+        ctx.strokeStyle = ca(P, 0.75 * sp.glow);
+        ctx.lineWidth = 3; ctx.shadowColor = ca(P, 0.5); ctx.shadowBlur = 8;
+        ctx.stroke(); ctx.shadowBlur = 0;
+
+        // 6. 세그먼트 링 (역회전, 상태에 따라 점등)
+        const segR   = R * 0.73;
+        const segOff = -(t * sp.spd * 0.5);
+        const NSEG   = 36;
+        for (let i = 0; i < NSEG; i++) {
+            const a1  = (i/NSEG)*Math.PI*2 + segOff;
+            const a2  = a1 + (Math.PI*2/NSEG) * 0.6;
+            const lit = Math.sin(t*2.8 + i*0.9) > (1.1 - sp.act*2.0);
+            ctx.beginPath(); ctx.arc(cx, cy, segR, a1, a2);
+            ctx.strokeStyle = ca(P, lit ? 0.88*sp.glow : 0.10);
+            ctx.lineWidth = 4.5; ctx.stroke();
+        }
+
+        // 7. 내부 디테일 링 (정회전, 더 빠름)
+        const inR   = R * 0.57;
+        const inOff = t * sp.spd * 1.3;
+        ctx.beginPath(); ctx.arc(cx, cy, inR, 0, Math.PI*2);
+        ctx.strokeStyle = ca(P, 0.15); ctx.lineWidth = 1; ctx.stroke();
+
+        const nArcs = hudState==='speaking' ? 8 : hudState==='thinking' ? 5 : 3;
+        for (let i = 0; i < nArcs; i++) {
+            const a = (i/nArcs)*Math.PI*2 + inOff;
+            ctx.beginPath(); ctx.arc(cx, cy, inR, a, a+0.30);
+            ctx.strokeStyle = ca(AC, 0.72*sp.glow); ctx.lineWidth = 3; ctx.stroke();
+        }
+
+        // 8. 4방향 카디널 마커 (앰버 점 + 십자)
+        [0, Math.PI/2, Math.PI, Math.PI*1.5].forEach(ang => {
+            const mr = R * 1.07;
+            const px = cx + Math.cos(ang)*mr, py = cy + Math.sin(ang)*mr;
+            ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2);
+            ctx.fillStyle = ca(AC, 0.95); ctx.fill();
+            ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI*2);
+            ctx.strokeStyle = ca(AC, 0.3); ctx.lineWidth = 1; ctx.stroke();
+            const cl = 7;
+            ctx.strokeStyle = ca(AC, 0.5); ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(px-cl, py); ctx.lineTo(px+cl, py); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(px, py-cl); ctx.lineTo(px, py+cl); ctx.stroke();
+        });
+
+        // 9. 코어 글로우
+        const cR  = R * 0.28;
+        const pul = 1 + Math.sin(t*(hudState==='speaking' ? 5.5 : hudState==='thinking' ? 3.2 : 1.6))*0.07;
+        const cg  = ctx.createRadialGradient(cx,cy,0, cx,cy, cR*3*pul);
+        cg.addColorStop(0,   ca(W, 0.18*sp.glow));
+        cg.addColorStop(0.3, ca(P, 0.28*sp.glow));
+        cg.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.arc(cx, cy, cR*3*pul, 0, Math.PI*2); ctx.fill();
+
+        ctx.beginPath(); ctx.arc(cx, cy, cR*pul, 0, Math.PI*2);
+        ctx.strokeStyle = ca(P, 0.7*sp.glow);
+        ctx.lineWidth = 2; ctx.shadowColor = ca(P, sp.glow); ctx.shadowBlur = cR*0.5;
+        ctx.stroke(); ctx.shadowBlur = 0;
+
+        // 10. 텍스트
+        ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+        ctx.font        = `900 ${S*0.08}px 'Orbitron', sans-serif`;
+        ctx.fillStyle   = ca(P, 0.95);
+        ctx.shadowColor = ca(P, 0.9); ctx.shadowBlur = 14;
+        ctx.fillText('J.A.R.V.I.S', cx, cy - S*0.018);
+
+        ctx.shadowBlur = 0;
+        ctx.font      = `${S*0.05}px 'Share Tech Mono', monospace`;
+        const stMap   = { idle:'STANDBY', thinking:'PROCESSING', speaking:'ACTIVE' };
+        ctx.fillStyle = hudState==='idle' ? ca(P,0.45) : ca(AC, 0.92);
+        ctx.fillText(stMap[hudState]||'STANDBY', cx, cy + S*0.075);
+        ctx.restore();
+    }
+
+    // ── 애니메이션 루프
+    function tick() { t += 0.016; draw(); requestAnimationFrame(tick); }
+
+    // ── 상태 변경
+    function setState(ns) {
+        hudState = ns;
+        // HUD 상태 텍스트
+        const el = document.getElementById('hudStatus');
+        if (el) {
+            const mp = { idle:'● STANDBY', thinking:'◈ PROCESSING...', speaking:'◉ ACTIVE' };
+            el.textContent = mp[ns] || '● STANDBY';
+            el.className   = 'hud-status-' + ns;
+        }
+        // 생각중 파동 바: thinking 상태일 때만 표시
+        const wave = document.getElementById('thinkingWave');
+        if (wave) {
+            if (ns === 'thinking') wave.classList.add('active');
+            else wave.classList.remove('active');
+        }
+    }
+
+    // ── MutationObserver: 채팅 메시지 변화 감지
+    function initObserver() {
+        const box = document.getElementById('chatBox');
+        if (!box) { setTimeout(initObserver, 300); return; }
+        new MutationObserver(muts => {
+            muts.forEach(m => m.addedNodes.forEach(node => {
+                if (!node.classList) return;
+                if (node.classList.contains('user'))      { setState('thinking'); }
+                if (node.classList.contains('assistant')) {
+                    setState('speaking');
+                    const dur = Math.min(Math.max((node.textContent||'').length*35, 2500), 9000);
+                    setTimeout(() => { if (hudState === 'speaking') setState('idle'); }, dur);
+                }
+            }));
+        }).observe(box, { childList: true });
+    }
+
+    // ── 초기화
+    function init() {
+        if (!initCtx()) return;
+        initObserver();
+        tick();
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+
+    window.JarvisHUD = { setState };
+})();
