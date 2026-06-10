@@ -86,10 +86,7 @@ async def voice_chat(
         tts_bytes = await synthesize(answer)
         audio_b64 = base64.b64encode(tts_bytes).decode("utf-8")
     except RuntimeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
-        )
+        logger.warning("TTS 오류 (무시): %s", e)
     logger.info(
         "TTS=%.2fs LLM=%.2fs 임베딩=%.2fs DB=%.2fs 전체=%.2fs",
         round(time.perf_counter() - t0, 2),
