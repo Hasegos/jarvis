@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     HISTORY_LIMIT: int
     LLM_THINKING_MODE: str
 
+    # Obsidian wiki
+    WIKI_VAULT_PATH: str
+
     # ──────────────────────────
     # 5. 계산된 프로퍼티 (DB URL)
     # ──────────────────────────
