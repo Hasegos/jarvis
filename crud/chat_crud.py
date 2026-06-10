@@ -3,7 +3,11 @@ from sqlalchemy.orm import Session
 
 from models.session_model import Session as ChatSession
 from models.message_model import Message
-from core.constant import RAG_TOP_K, RAG_MAX_DISTANCE
+from core.constant import(
+    RAG_TOP_K,
+    RAG_MAX_DISTANCE,
+    SESSION_IDLE_MINUTES
+)
 
 
 # ─────────────────────
@@ -59,7 +63,6 @@ def get_or_create_session(db: Session, session_id: int | None) -> ChatSession:
     Returns:
         유효한 ChatSession 객체
     """
-    IDLE_MINUTES = 30
 
     if session_id is None:
         return create_session(db)
@@ -76,7 +79,7 @@ def get_or_create_session(db: Session, session_id: int | None) -> ChatSession:
         if last.tzinfo is None:
             last = last.replace(tzinfo=timezone.utc)
         elapsed = (now - last).total_seconds() / 60
-        if elapsed >= IDLE_MINUTES:
+        if elapsed >= SESSION_IDLE_MINUTES:
             return create_session(db)
 
     return session

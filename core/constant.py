@@ -45,9 +45,8 @@ THINKING_KEYWORDS = frozenset({
 # 4. STT 자주 쓰는 단어
 # ──────────────────────────────────────
 STT_VOCAB = [
-    "자비스", "엄마", "아빠", "하나님", "주님"
-    "아이언",
-    "수금"
+    "자비스", "엄마", "아빠", "하나님", "주님",
+    "아이언","수금"
 ]
 
 STT_INITIAL_PROMPT = (", ".join(STT_VOCAB) + " 등의 단어가 나올 수 있습니다.") if STT_VOCAB else None
@@ -124,3 +123,21 @@ WIKI_SCORE_THRESHOLD = 3.0
 WIKI_TOP_K = 3
 
 WIKI_MAX_CHARS = 1500
+
+
+# ──────────────────────────────────────
+# 8. 세션·백그라운드 주기
+# ──────────────────────────────────────
+SUMMARY_EVERY_N_TURNS = 2
+SESSION_IDLE_MINUTES = 30
+
+
+# ─────────────────────────────────────
+# 9. 도구 (function calling)
+# ─────────────────────────────────────
+# 에이전트 루프 최대 반복 횟수 (도구 호출→결과→재호출).
+TOOL_MAX_ITERATIONS = 3
+
+WEB_SEARCH_MAX_RESULTS = 5
+
+WEB_SEARCH_REGION = "kr-kr"
