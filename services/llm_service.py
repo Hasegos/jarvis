@@ -1,10 +1,14 @@
-import re
+import re, json
 from collections.abc import Iterator
 
 from openai import APIConnectionError, APITimeoutError
 
 from core.config import settings
-from core.constant import SYSTEM_PROMPT
+from core.constant import (
+    SYSTEM_PROMPT,
+    PROFILE_EXTRACT_PROMPT,
+    PROFILE_SECTIONS
+)
 from services.lm_client import lm_client
 
 _MD_BOLD_RE     = re.compile(r'\*\*([^*\n]+)\*\*')
@@ -97,29 +101,38 @@ def sentence_stream(tokens: Iterator[str]) -> Iterator[str]:
 
 
 # ─────────────────────────────────────
-# 4. 메시지 빌드 (시스템 프롬프트 주입)
+# 4. 메시지 빌드 (시스템 프롬프트 + RAG 주입)
 # ─────────────────────────────────────
-def _build_messages(history: list[dict]) -> list[dict]:
+def _build_messages(history: list[dict], rag_context: str | None = None) -> list[dict]:
     """
     대화 히스토리 앞에 시스템 프롬프트를 prepend한다.
 
+    RAG 컨텍스트가 있으면 시스템 프롬프트 뒤 별도 system 메시지로 주입한다.
+    (현재 대화 히스토리와 구분되도록 분리 — 시간순 혼선 방지)
+
     Args:
-        history: user/assistant 대화 히스토리
+        history    : user/assistant 대화 히스토리
+        rag_context: 과거 대화 참고 블록. None이면 주입 안 함.
     Returns:
-        시스템 프롬프트 포함 메시지 리스트
+        시스템 프롬프트(+RAG) 포함 메시지 리스트
     """
-    return [{"role": "system", "content": SYSTEM_PROMPT}] + history
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if rag_context:
+        messages.append({"role": "system", "content": rag_context})
+    return messages + history
 
 
 # ─────────────────────
 # 5. 블로킹 호출
 # ─────────────────────
-def chat(history: list[dict], use_thinking: bool = False) -> str:
+def chat(history: list[dict], use_thinking: bool = False, rag_context: str | None = None) -> str:
     """
     블로킹 LLM 호출. 완성된 응답 텍스트를 반환한다.
 
     Args:
-        history: user/assistant 대화 히스토리
+        history    : user/assistant 대화 히스토리
+        use_thinking: thinking 활성화 여부
+        rag_context: 과거 대화 참고 블록 (선택)
     Returns:
         thinking 블록이 제거된 응답 텍스트
     Raises:
@@ -128,7 +141,7 @@ def chat(history: list[dict], use_thinking: bool = False) -> str:
     try:
         response = lm_client.chat.completions.create(
             model=settings.LM_STUDIO_MODEL,
-            messages=_build_messages(history),
+            messages=_build_messages(history, rag_context),
             timeout=settings.LM_STUDIO_TIMEOUT,
             temperature=settings.LLM_TEMPERATURE,
             top_p=settings.LLM_TOP_P,
@@ -157,12 +170,14 @@ def chat(history: list[dict], use_thinking: bool = False) -> str:
 # ─────────────────────
 # 6. 스트리밍 호출
 # ─────────────────────
-def stream_chat(history: list[dict], use_thinking: bool  = False) -> Iterator[str]:
+def stream_chat(history: list[dict], use_thinking: bool = False, rag_context: str | None = None) -> Iterator[str]:
     """
     스트리밍 LLM 호출. 토큰을 순서대로 yield한다.
 
     Args:
-        history: user/assistant 대화 히스토리
+        history    : user/assistant 대화 히스토리
+        use_thinking: thinking 활성화 여부
+        rag_context: 과거 대화 참고 블록 (선택)
     Yields:
         LLM 응답 토큰 (thinking 블록 포함 원문)
     Raises:
@@ -171,7 +186,7 @@ def stream_chat(history: list[dict], use_thinking: bool  = False) -> Iterator[st
     try:
         stream = lm_client.chat.completions.create(
             model=settings.LM_STUDIO_MODEL,
-            messages=_build_messages(history),
+            messages=_build_messages(history, rag_context),
             timeout=settings.LM_STUDIO_TIMEOUT,
             temperature=settings.LLM_TEMPERATURE,
             top_p=settings.LLM_TOP_P,
@@ -204,6 +219,7 @@ def stream_chat(history: list[dict], use_thinking: bool  = False) -> Iterator[st
                 yield token
     except Exception as e:
         raise RuntimeError(f"LLM 스트리밍 오류: {e}")
+
 
 # ─────────────────────
 # 7. 세션 한 단어 요약
@@ -245,3 +261,62 @@ def generate_summary(history: list[dict]) -> str:
         return word
     except Exception as e:
         raise RuntimeError(f"요약 생성 오류: {e}")
+
+
+# ─────────────────────────────────────
+# 8. 기억 프로필 갱신 추출
+# ─────────────────────────────────────
+def extract_profile_updates(profile_text: str, conversation: str) -> list[dict]:
+    """
+    현재 프로필과 대화를 보고, 갱신할 섹션만 JSON 배열로 추출한다.
+
+    thinking 없이 호출한다. 변경이 없거나 파싱 실패 시 빈 리스트를 반환해
+    호출부가 안전하게 스킵하도록 한다.
+
+    Args:
+        profile_text: 현재 전체 프로필 텍스트 (섹션별 마크다운 합본)
+        conversation: 최근 대화 텍스트
+    Returns:
+        [{"section": str, "content": str}, ...]. 변경 없음/실패 시 [].
+    """
+    prompt = PROFILE_EXTRACT_PROMPT.format(
+        sections=", ".join(PROFILE_SECTIONS),
+        profile=profile_text or "(empty)",
+        conversation=conversation,
+    )
+    try:
+        response = lm_client.chat.completions.create(
+            model=settings.LM_STUDIO_MODEL,
+            messages=[
+                {"role": "system", "content": "You extract durable user facts as strict JSON."},
+                {"role": "user",   "content": "/no_think\n" + prompt},
+            ],
+            timeout=settings.LM_STUDIO_TIMEOUT,
+            temperature=0.1,
+            max_tokens=settings.LLM_MAX_TOKENS,
+        )
+        raw = response.choices[0].message.content or ""
+        raw = strip_thinking(raw).strip()
+
+        # ──────────────────────────────────────
+        # 8-1. JSON 파싱 (코드펜스/잡텍스트 방어)
+        # ──────────────────────────────────────
+        start = raw.find("[")
+        end   = raw.rfind("]")
+        if start == -1 or end == -1 or end < start:
+            return []
+        items = json.loads(raw[start : end + 1])
+
+        # 형식 검증: 정해진 섹션 + 비어있지 않은 content 문자열만 통과
+        result = []
+        for it in items:
+            if (
+                isinstance(it, dict)
+                and it.get("section") in PROFILE_SECTIONS
+                and isinstance(it.get("content"), str)
+                and it["content"].strip()
+            ):
+                result.append({"section": it["section"], "content": it["content"].strip()})
+        return result
+    except Exception:
+        return []

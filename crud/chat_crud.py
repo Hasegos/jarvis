@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from models.session_model import Session as ChatSession
 from models.message_model import Message
+from core.constant import RAG_TOP_K, RAG_MAX_DISTANCE
 
 
 # ─────────────────────
@@ -197,3 +198,42 @@ def get_all_messages_by_session(
         .order_by(Message.created_at.asc())
         .all()
     )
+
+
+# ───────────────────────────────────────────
+# 8. 유사 메시지 검색 (대화 RAG)
+# ───────────────────────────────────────────
+def search_similar_messages(
+    db                : Session,
+    query_embedding   : list[float],
+    exclude_session_id: int,
+    limit             : int = RAG_TOP_K,
+    max_distance      : float = RAG_MAX_DISTANCE,
+) -> list[tuple[Message, float]]:
+    """
+    쿼리 임베딩과 코사인 거리가 가까운 과거 메시지를 검색한다.
+
+    현재 세션은 이미 히스토리로 들어가므로 제외하고, 다른 세션에서 찾는다.
+    HNSW 인덱스(vector_cosine_ops)를 사용하며, 거리가 임계값을 넘는
+    무관한 결과는 제외한다.
+
+    Args:
+        db                : SQLAlchemy 세션
+        query_embedding   : 검색 기준 임베딩 (1024차원)
+        exclude_session_id: 제외할 세션 PK (보통 현재 세션)
+        limit             : 가져올 최대 메시지 수
+        max_distance      : 코사인 거리 임계값 (0=동일, 1=무관). 초과 시 제외.
+    Returns:
+        (Message, distance) 튜플 리스트. 거리 오름차순(가까운 것부터).
+    """
+    distance = Message.embedding.cosine_distance(query_embedding)
+
+    rows = (
+        db.query(Message, distance.label("distance"))
+        .filter(Message.session_id != exclude_session_id)
+        .filter(distance <= max_distance)
+        .order_by(distance.asc())
+        .limit(limit)
+        .all()
+    )
+    return [(row[0], row[1]) for row in rows]

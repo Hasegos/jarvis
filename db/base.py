@@ -2,6 +2,7 @@ from db.base_class import Base
 from models.fact_model import Fact
 from models.session_model import Session
 from models.message_model import Message
+from models.memory_profile_model import MemoryProfile
 
 # ─────────────────────────────────────
 # 1. 모델 통합 관리 (Alembic/Base 전용)
@@ -13,3 +14,4 @@ from models.message_model import Message
 # 1-2. Session : 대화 세션 (sessions 테이블)
 # 1-3. Message : 대화 메시지 + 임베딩 (messages 테이블)
 # 1-4. Fact    : 추출된 사실 + 임베딩 (facts 테이블)
+# 1-5. MemoryProfile : 사용자 기억 프로필 (memory_profiles 테이블)

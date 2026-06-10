@@ -39,3 +39,88 @@ THINKING_KEYWORDS = frozenset({
     "설계", "아키텍처", "최적화", "리팩터링", "분석해", "비교해",
     "장단점", "차이점",
 })
+
+
+# ──────────────────────────────────────
+# 4. STT 자주 쓰는 단어
+# ──────────────────────────────────────
+STT_VOCAB = [
+    "자비스", "엄마", "아빠", "하나님", "주님"
+    "아이언",
+    "수금"
+]
+
+STT_INITIAL_PROMPT = (", ".join(STT_VOCAB) + " 등의 단어가 나올 수 있습니다.") if STT_VOCAB else None
+
+
+# ─────────────────────
+# 5. 대화 RAG 검색 설정
+# ─────────────────────
+# 과거 대화에서 가져올 유사 메시지 최대 개수
+RAG_TOP_K = 3
+
+RAG_MAX_DISTANCE = 0.5
+
+
+# ──────────────────────────────────────
+# 6. 기억 프로필 (memory_profile)
+# ──────────────────────────────────────
+PROFILE_SECTIONS = ["Identity", "Preferences", "Hobbies", "Schedule", "Projects"]
+
+PROFILE_ALWAYS_INJECT = ["Identity"]
+
+PROFILE_SECTION_KEYWORDS = {
+    "Preferences": ["선호", "좋아하는", "싫어", "취향", "스타일"],
+    "Hobbies":     ["취미", "좋아", "게임", "관심사", "여가"],
+    "Schedule":    ["일정", "약속", "스케줄", "언제", "날짜", "계획"],
+    "Projects":    ["프로젝트", "작업", "개발", "만들", "코드"],
+}
+
+# 프로필 갱신 추출 프롬프트.
+PROFILE_EXTRACT_PROMPT = """\
+You maintain a long-term memory profile of the user, split into fixed sections.
+Sections: {sections}
+
+Below is the CURRENT profile and the RECENT conversation.
+Find NEW or CHANGED durable facts about the user worth remembering long-term
+(identity, preferences, hobbies, schedule, projects). Ignore one-off chit-chat.
+
+Rules:
+- Output ONLY a JSON array. No prose, no markdown fences.
+- Each item: {{"section": "<one of the sections>", "content": "<full updated markdown for that section>"}}
+- Include a section ONLY if it changed. If nothing changed, output [].
+- content is the COMPLETE markdown for that section in ENGLISH, as "- key: value" bullet lines.
+- NEVER delete existing facts. Keep all current lines and ADD/UPDATE as needed.
+- If a fact changes (e.g. a name correction), update that line, keep the rest.
+
+CURRENT PROFILE:
+{profile}
+
+RECENT CONVERSATION:
+{conversation}
+
+JSON:"""
+
+
+# ──────────────────────────────────────
+# 7. Obsidian wiki 검색 설정
+# ──────────────────────────────────────
+WIKI_SUBDIR = "wiki"
+
+WIKI_EXCLUDE_NAMES = {"_template", "index", "log"}
+
+# 스코어링 가중치
+WIKI_SCORE_FILENAME_EXACT   = 10.0   # 파일명 완전 일치
+WIKI_SCORE_FILENAME_PARTIAL = 7.0    # 파일명 부분 포함
+WIKI_SCORE_HEADING          = 4.0    # 본문 헤더(#)에 포함
+WIKI_SCORE_BODY             = 2.0    # 본문에 포함
+
+# 본문 등장 횟수 가산점 (횟수 × WEIGHT, 단 CAP 까지만)
+WIKI_COUNT_WEIGHT = 0.5
+WIKI_COUNT_CAP    = 3.0
+
+WIKI_SCORE_THRESHOLD = 3.0
+
+WIKI_TOP_K = 3
+
+WIKI_MAX_CHARS = 1500
