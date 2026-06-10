@@ -7,9 +7,11 @@ from core.config import settings
 from core.constant import (
     SYSTEM_PROMPT,
     PROFILE_EXTRACT_PROMPT,
-    PROFILE_SECTIONS
+    PROFILE_SECTIONS,
+    TOOL_MAX_ITERATIONS
 )
 from services.lm_client import lm_client
+from services.tool_service import TOOL_SPECS, execute_tool
 
 _MD_BOLD_RE     = re.compile(r'\*\*([^*\n]+)\*\*')
 _MD_ITALIC_RE   = re.compile(r'\*([^*\n]+)\*|_([^_\n]+)_')
@@ -320,3 +322,106 @@ def extract_profile_updates(profile_text: str, conversation: str) -> list[dict]:
         return result
     except Exception:
         return []
+
+
+# ─────────────────────────────────────
+# 9. 도구 에이전트 루프
+# ─────────────────────────────────────
+def chat_with_tools(history: list[dict], use_thinking: bool = False, rag_context: str | None = None) -> str:
+    """
+    도구(web_search 등)를 사용할 수 있는 블로킹 LLM 호출.
+
+    모델이 tool_calls 를 내면 도구를 실행해 결과를 돌려주고 재호출한다.
+    TOOL_MAX_ITERATIONS 초과 시 도구 없이 마지막 답변을 강제해 무한루프를 막는다.
+
+    Args:
+        history    : user/assistant 대화 히스토리
+        use_thinking: thinking 활성화 여부
+        rag_context: 프로필/위키/RAG 참고 블록 (선택)
+    Returns:
+        thinking 블록이 제거된 최종 응답 텍스트
+    Raises:
+        RuntimeError: 연결 실패, 타임아웃, API 오류
+    """
+    messages = _build_messages(history, rag_context)
+
+    for _ in range(TOOL_MAX_ITERATIONS):
+        # ──────────────────────────────────────
+        # 9-1. LLM 호출 (도구 스펙 포함)
+        # ──────────────────────────────────────
+        try:
+            response = lm_client.chat.completions.create(
+                model=settings.LM_STUDIO_MODEL,
+                messages=messages,
+                tools=TOOL_SPECS,
+                timeout=settings.LM_STUDIO_TIMEOUT,
+                temperature=settings.LLM_TEMPERATURE,
+                top_p=settings.LLM_TOP_P,
+                max_tokens=settings.LLM_MAX_TOKENS,
+                extra_body={
+                    "chat_template_kwargs" : {"enable_thinking": use_thinking},
+                    "top_k"          : settings.LLM_TOP_K,
+                    "repeat_penalty" : settings.LLM_REPEAT_PENALTY,
+                },
+            )
+        except APIConnectionError:
+            raise RuntimeError(
+                "LM Studio에 연결할 수 없습니다. LM Studio가 실행 중인지 확인하세요."
+            )
+        except APITimeoutError:
+            raise RuntimeError(
+                f"LM Studio 응답 타임아웃 ({settings.LM_STUDIO_TIMEOUT}초 초과)."
+            )
+        except Exception as e:
+            raise RuntimeError(f"LLM 호출 오류: {e}")
+
+        msg = response.choices[0].message
+
+        # 도구 호출이 없으면 최종 답변
+        if not msg.tool_calls:
+            return strip_thinking(msg.content or "")
+
+        # ──────────────────────────────────────
+        # 9-2. 도구 실행 → 결과를 대화에 추가 → 재호출
+        # ──────────────────────────────────────
+        messages.append({
+            "role": "assistant",
+            "content": msg.content or "",
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in msg.tool_calls
+            ],
+        })
+        for tc in msg.tool_calls:
+            result = execute_tool(tc.function.name, tc.function.arguments)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": result,
+            })
+
+    # ──────────────────────────────────────
+    # 9-3. 반복 초과 — 도구 없이 답변 강제
+    # ──────────────────────────────────────
+    try:
+        response = lm_client.chat.completions.create(
+            model=settings.LM_STUDIO_MODEL,
+            messages=messages,
+            timeout=settings.LM_STUDIO_TIMEOUT,
+            temperature=settings.LLM_TEMPERATURE,
+            top_p=settings.LLM_TOP_P,
+            max_tokens=settings.LLM_MAX_TOKENS,
+            extra_body={
+                "chat_template_kwargs" : {"enable_thinking": use_thinking},
+                "top_k"          : settings.LLM_TOP_K,
+                "repeat_penalty" : settings.LLM_REPEAT_PENALTY,
+            },
+        )
+    except Exception as e:
+        raise RuntimeError(f"LLM 호출 오류: {e}")
+
+    return strip_thinking(response.choices[0].message.content or "")

@@ -23,20 +23,18 @@ from models.session_model import Session as ChatSession
 from services.embedding_service import embed_text
 from services.wiki_service import search_wiki
 from services.llm_service import (
-    chat,
+    chat_with_tools,
     generate_summary,
-    stream_chat,
-    strip_thinking,strip_markdown,
+    strip_markdown,
     extract_profile_updates 
 )
 from core.constant import (
     THINKING_KEYWORDS, THINKING_LENGTH_THRESHOLD,
     PROFILE_ALWAYS_INJECT, PROFILE_SECTION_KEYWORDS,
+    SUMMARY_EVERY_N_TURNS,
 )
 
 logger = get_logger("chat_service")
-
-SUMMARY_EVERY_N_TURNS = 2
 
 
 # ─────────────────────────────────────
@@ -71,21 +69,31 @@ def run_summary_background(session_id: int) -> None:
             return
 
         history = [{"role": m.role, "content": m.content} for m in messages]
-        summary = generate_summary(history)
-        logger.debug("summary 생성 결과: session=%d summary=%r", session_id, summary)
-
-        if summary:
-            update_session_summary(db, session_id, summary)
-            logger.debug("session=%d summary=%s", session_id, summary)
-        else:
-            logger.warning("summary 빈 문자열: session=%d", session_id)
 
         # ──────────────────────────────────────
-        # 1-2. 기억 프로필 갱신 (요약과 같은 주기)
+        # 1-2. 세션 요약
         # ──────────────────────────────────────
-        _update_memory_profile(db, history)
+        try:
+            summary = generate_summary(history)
+            logger.debug("summary 생성 결과: session=%d summary=%r", session_id, summary)
+
+            if summary:
+                update_session_summary(db, session_id, summary)
+                logger.debug("session=%d summary=%s", session_id, summary)
+            else:
+                logger.warning("summary 빈 문자열: session=%d", session_id)
+        except Exception as e:
+            logger.warning("요약 생성 실패 (무시): %s", e)
+
+        # ──────────────────────────────────────
+        # 1-3. 기억 프로필 갱신 (요약과 같은 주기)
+        # ──────────────────────────────────────
+        try:
+            _update_memory_profile(db, history)
+        except Exception as e:
+            logger.warning("프로필 갱신 실패 (무시): %s", e)
     except Exception as e:
-        logger.warning("요약 생성 실패 (무시): %s", e)
+        logger.warning("백그라운드 태스크 실패 (무시): %s", e)
     finally:
         db.close()
 
@@ -314,11 +322,8 @@ async def process_message(
     t0 = time.perf_counter()
     use_thinking = _should_think(user_text)
     logger.debug("thinking=%s | input_len=%d", "on" if use_thinking else "off", len(user_text))
-    if settings.LLM_STREAMING:
-        tokens = await run_in_threadpool(lambda: list(stream_chat(history, use_thinking, context)))
-        answer = strip_thinking("".join(tokens))
-    else:
-        answer = await run_in_threadpool(chat, history, use_thinking, context)
+    # 도구(web_search 등) 사용 가능한 에이전트 루프.
+    answer = await run_in_threadpool(chat_with_tools, history, use_thinking, context)
     answer = strip_markdown(answer)
     timings["llm"] = round(time.perf_counter() - t0, 2)
 
