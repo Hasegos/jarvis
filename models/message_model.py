@@ -1,10 +1,9 @@
 from datetime import datetime
-from typing import Optional
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger, String, Text, TIMESTAMP,
-    ForeignKey, func, CheckConstraint,
+    ForeignKey, func, CheckConstraint, Index
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
@@ -15,6 +14,15 @@ class Message(Base):
 
     __table_args__ = (
         CheckConstraint("role IN ('user', 'assistant')", name="ck_messages_role"),
+
+        # 임베딩 벡터 검색용 HNSW 인덱스 (코사인 거리)
+        Index(
+            "ix_messages_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     message_id : Mapped[int]                = mapped_column(BigInteger, primary_key=True, autoincrement=True)
