@@ -5,7 +5,7 @@ from faster_whisper import WhisperModel
 from pydub import AudioSegment
 
 from core.config import settings
-from core.constant import STT_HALLUCINATION_PHRASES
+from core.constant import STT_HALLUCINATION_PHRASES, STT_INITIAL_PROMPT
 
 
 # ─────────────────────────────────────
@@ -76,6 +76,11 @@ async def transcribe(file: UploadFile = File(...)):
         segments, _ = _model.transcribe(
             tmp_wav,
             language=settings.STT_LANGUAGE,
+            beam_size=5,
+            condition_on_previous_text=False,
+            vad_filter=True,
+            temperature=0.0,
+            initial_prompt=STT_INITIAL_PROMPT,
         )
         text = "".join(seg.text for seg in segments).strip()
 
