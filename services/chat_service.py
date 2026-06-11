@@ -1,7 +1,7 @@
 import time
 
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
+from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from core.config import settings
 from core.logger import get_logger
@@ -24,14 +24,17 @@ from services.embedding_service import embed_text
 from services.wiki_service import search_wiki
 from services.llm_service import (
     chat_with_tools,
+    stream_chat_with_tools,
     generate_summary,
     strip_markdown,
     extract_profile_updates 
 )
 from core.constant import (
+    SYSTEM_PROMPT,
     THINKING_KEYWORDS, THINKING_LENGTH_THRESHOLD,
     PROFILE_ALWAYS_INJECT, PROFILE_SECTION_KEYWORDS,
     SUMMARY_EVERY_N_TURNS,
+    FORCE_SEARCH_KEYWORDS,
 )
 
 logger = get_logger("chat_service")
@@ -129,7 +132,27 @@ def _should_think(user_text: str) -> bool:
 
 
 # ─────────────────────────────────────
-# 3. 과거 대화 검색 (RAG 컨텍스트 구성)
+# 3. web_search 강제 여부 판단
+# ─────────────────────────────────────
+def _should_force_search(user_text: str) -> bool:
+    """
+    입력에 검색 명령 키워드(검색/찾아 등)가 있으면 web_search 를 강제한다.
+
+    모델 자율 판단에 맡기면 stale 한 history 를 보고 검색을 건너뛰는 경우가
+    있어, 명시적 검색 요청 시에는 도구 호출을 강제하기 위한 플래그를 만든다.
+    (부분 문자열 매칭 — "검색엔진" 같은 단어에도 걸릴 수 있음)
+
+    Args:
+        user_text: 사용자 입력 텍스트
+    Returns:
+        web_search 강제 여부
+    """
+    lowered = user_text.lower()
+    return any(kw in lowered for kw in FORCE_SEARCH_KEYWORDS)
+
+
+# ─────────────────────────────────────
+# 4. 과거 대화 검색 (RAG 컨텍스트 구성)
 # ─────────────────────────────────────
 def _build_rag_context(db: Session, query_embedding: list[float], current_session_id: int) -> str | None:
     """
@@ -155,7 +178,7 @@ def _build_rag_context(db: Session, query_embedding: list[float], current_sessio
 
 
 # ─────────────────────────────────────
-# 4. 기억 프로필 주입 (필수 + 키워드 매칭)
+# 5. 기억 프로필 주입 (필수 + 키워드 매칭)
 # ─────────────────────────────────────
 def _select_profile_sections(user_text: str) -> list[str]:
     """
@@ -205,7 +228,7 @@ def _build_profile_context(db: Session, user_text: str) -> str | None:
 
 
 # ─────────────────────────────────────
-# 5. 기억 프로필 갱신 (백그라운드)
+# 6. 기억 프로필 갱신 (백그라운드)
 # ─────────────────────────────────────
 def _update_memory_profile(db: Session, history: list[dict]) -> None:
     """
@@ -232,7 +255,7 @@ def _update_memory_profile(db: Session, history: list[dict]) -> None:
         return
 
     # ──────────────────────────────────────
-    # 5-1. 줄 수 가드 후 섹션별 저장 (삭제 방지)
+    # 6-1. 줄 수 가드 후 섹션별 저장 (삭제 방지)
     # ──────────────────────────────────────
     for upd in updates:
         section  = upd["section"]
@@ -242,7 +265,6 @@ def _update_memory_profile(db: Session, history: list[dict]) -> None:
         old_lines = len([ln for ln in old_body.splitlines() if ln.strip()])
         new_lines = len([ln for ln in new_body.splitlines() if ln.strip()])
 
-        # 기존보다 줄이 줄면 LLM이 기존 사실을 누락한 것으로 보고 거부
         if new_lines < old_lines:
             logger.warning(
                 "프로필 갱신 거부(줄 감소): section=%s %d→%d", section, old_lines, new_lines
@@ -254,7 +276,7 @@ def _update_memory_profile(db: Session, history: list[dict]) -> None:
 
 
 # ─────────────────────────────────────
-# 6. 메시지 처리 (공통 파이프라인)
+# 7. 메시지 처리 (공통 파이프라인)
 # ─────────────────────────────────────
 async def process_message(
     db        : Session,
@@ -279,12 +301,12 @@ async def process_message(
     timings = {}
 
     # ──────────────────────────────────────
-    # 6-1. 세션 판단
+    # 7-1. 세션 판단
     # ──────────────────────────────────────
     session = await run_in_threadpool(get_or_create_session, db, session_id)
 
     # ──────────────────────────────────────
-    # 6-2. 대화 히스토리 구성
+    # 7-2. 대화 히스토리 구성
     # ──────────────────────────────────────
     messages = await run_in_threadpool(
         get_messages_by_session,
@@ -299,7 +321,7 @@ async def process_message(
     history.append({"role": "user", "content": user_text})
 
     # ──────────────────────────────────────
-    # 6-3. user 임베딩 + RAG/프로필 컨텍스트 구성
+    # 7-3. user 임베딩 + RAG/프로필 컨텍스트 구성
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     user_embedding = await run_in_threadpool(embed_text, user_text)
@@ -317,25 +339,29 @@ async def process_message(
     context = "\n\n".join(c for c in (profile_context, wiki_context, rag_context) if c) or None
 
     # ──────────────────────────────────────
-    # 6-4. LLM 호출
+    # 7-4. LLM 호출
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     use_thinking = _should_think(user_text)
-    logger.debug("thinking=%s | input_len=%d", "on" if use_thinking else "off", len(user_text))
+    force_search = _should_force_search(user_text)
+    logger.debug(
+        "thinking=%s force_search=%s | input_len=%d",
+        "on" if use_thinking else "off", force_search, len(user_text),
+    )
     # 도구(web_search 등) 사용 가능한 에이전트 루프.
-    answer = await run_in_threadpool(chat_with_tools, history, use_thinking, context)
+    answer = await run_in_threadpool(chat_with_tools, history, use_thinking, context, force_search)
     answer = strip_markdown(answer)
     timings["llm"] = round(time.perf_counter() - t0, 2)
 
     # ──────────────────────────────────────
-    # 6-5. assistant 임베딩
+    # 7-5. assistant 임베딩
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     assistant_embedding = await run_in_threadpool(embed_text, answer)
     timings["embedding"] = round(timings["embedding"] + (time.perf_counter() - t0), 2)
 
     # ──────────────────────────────────────
-    # 6-6. 메시지 저장
+    # 7-6. 메시지 저장
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     await run_in_threadpool(
@@ -347,3 +373,94 @@ async def process_message(
     timings["db"] = round(time.perf_counter() - t0, 2)
 
     return session, answer, timings
+
+
+# ─────────────────────────────────────
+# 8. 메시지 처리 (스트리밍 파이프라인, SSE용)
+# ─────────────────────────────────────
+async def process_message_stream(
+    db        : Session,
+    session_id: int | None,
+    user_text : str,
+):
+    """
+    텍스트 입력을 받아 토큰/상태 이벤트를 실시간으로 yield 하는 스트리밍 파이프라인.
+
+    Yields:
+        {"type": "token",  "text": str}                          — 답변 조각
+        {"type": "status", "text": str}                          — 도구 실행 상태
+        {"type": "answer_complete", "session_id", "answer"}      — 저장 완료 후 마지막 이벤트
+    Raises:
+        RuntimeError: LLM 또는 임베딩 오류
+    """
+    # ──────────────────────────────────────
+    # 8-1. 세션 + 히스토리 + 컨텍스트
+    # ──────────────────────────────────────
+    session = await run_in_threadpool(get_or_create_session, db, session_id)
+
+    messages = await run_in_threadpool(
+        get_messages_by_session,
+        db,
+        session.session_id,
+        settings.HISTORY_LIMIT,
+    )
+    history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in messages
+    ]
+    history.append({"role": "user", "content": user_text})
+
+    user_embedding = await run_in_threadpool(embed_text, user_text)
+
+    rag_context     = await run_in_threadpool(
+        _build_rag_context, db, user_embedding, session.session_id
+    )
+    profile_context = await run_in_threadpool(
+        _build_profile_context, db, user_text
+    )
+    wiki_context = await run_in_threadpool(search_wiki, user_text)
+
+    context = "\n\n".join(c for c in (profile_context, wiki_context, rag_context) if c) or None
+
+    _hist_chars = sum(len(m["content"]) for m in history)
+    logger.debug(
+        "[prefill] system=%d profile=%d wiki=%d rag=%d history=%d(msgs=%d) | context합=%d",
+        len(SYSTEM_PROMPT),
+        len(profile_context) if profile_context else 0,
+        len(wiki_context) if wiki_context else 0,
+        len(rag_context) if rag_context else 0,
+        _hist_chars, len(history),
+        len(context) if context else 0,
+    )
+
+    # ──────────────────────────────────────
+    # 8-2. 스트리밍 LLM — 토큰을 즉시 중계하며 누적
+    # ──────────────────────────────────────
+    use_thinking = _should_think(user_text)
+    force_search = _should_force_search(user_text)
+    logger.debug(
+        "thinking=%s force_search=%s | input_len=%d | stream",
+        "on" if use_thinking else "off", force_search, len(user_text),
+    )
+
+    answer_parts: list[str] = []
+    gen = stream_chat_with_tools(history, use_thinking, context, force_search)
+    async for event in iterate_in_threadpool(gen):
+        if event["type"] == "token":
+            answer_parts.append(event["text"])
+        yield event
+
+    answer = strip_markdown("".join(answer_parts).strip())
+
+    # ──────────────────────────────────────
+    # 8-3. 임베딩 + 저장 (스트림 종료 후)
+    # ──────────────────────────────────────
+    assistant_embedding = await run_in_threadpool(embed_text, answer)
+    await run_in_threadpool(
+        create_message, db, session.session_id, "user", user_text, user_embedding
+    )
+    await run_in_threadpool(
+        create_message, db, session.session_id, "assistant", answer, assistant_embedding
+    )
+
+    yield {"type": "answer_complete", "session_id": session.session_id, "answer": answer}
