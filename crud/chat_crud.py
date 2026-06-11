@@ -6,7 +6,6 @@ from models.message_model import Message
 from core.constant import(
     RAG_TOP_K,
     RAG_MAX_DISTANCE,
-    SESSION_IDLE_MINUTES
 )
 
 
@@ -54,12 +53,9 @@ def get_or_create_session(db: Session, session_id: int | None) -> ChatSession:
     """
     세션 ID가 있으면 시간 기반으로 유효성 판단, 없으면 새 세션 생성.
 
-    마지막 활동 후 SESSION_IDLE_MINUTES 이상 경과하면 새 세션으로 분기.
-    — 음성 대화에서 "한참 후에 다시 말 걸면 새 대화"를 구현하는 핵심 로직.
-
     Args:
         db        : SQLAlchemy 세션
-        session_id: 클라이언트가 넘긴 세션 ID. None이면 무조건 새 세션.
+        session_id: 클라이언트가 넘긴 세션 ID. None이면 새 세션 생성.
     Returns:
         유효한 ChatSession 객체
     """
@@ -70,17 +66,6 @@ def get_or_create_session(db: Session, session_id: int | None) -> ChatSession:
     session = get_session_by_id(db, session_id)
     if session is None:
         return create_session(db)
-
-    # 마지막 활동 후 30분 이상 경과 시 새 세션
-    if session.last_active_at is not None:
-        now = datetime.now(timezone.utc)
-        last = session.last_active_at
-        # timezone-aware 비교
-        if last.tzinfo is None:
-            last = last.replace(tzinfo=timezone.utc)
-        elapsed = (now - last).total_seconds() / 60
-        if elapsed >= SESSION_IDLE_MINUTES:
-            return create_session(db)
 
     return session
 
@@ -127,8 +112,29 @@ def create_message(
     return message
 
 
+# ─────────────────────
+# 5. 세션 영구 삭제 (하드)
+# ─────────────────────
+def delete_session(db: Session, session_id: int) -> bool:
+    """
+    세션과 그에 속한 모든 메시지/팩트를 영구 삭제한다 (복구 불가).
+
+    Args:
+        db        : SQLAlchemy 세션
+        session_id: 삭제할 세션 PK
+    Returns:
+        삭제 성공 True, 대상 없음 False
+    """
+    session = get_session_by_id(db, session_id)
+    if session is None:
+        return False
+    db.delete(session)
+    db.commit()
+    return True
+
+
 # ─────────────────────────────────────
-# 5. 세션의 메시지 목록 조회
+# 6. 세션의 메시지 목록 조회
 # ─────────────────────────────────────
 def get_messages_by_session(
     db        : Session,
@@ -156,7 +162,7 @@ def get_messages_by_session(
 
 
 # ─────────────────────
-# 6. 세션 요약 갱신
+# 7. 세션 요약 갱신
 # ─────────────────────
 def update_session_summary(
     db        : Session,
@@ -178,7 +184,7 @@ def update_session_summary(
 
 
 # ───────────────────────────────────────────
-# 7. 세션의 전체 메시지 조회 (히스토리 복원용)
+# 8. 세션의 전체 메시지 조회 (히스토리 복원용)
 # ───────────────────────────────────────────
 def get_all_messages_by_session(
     db        : Session,
@@ -204,7 +210,7 @@ def get_all_messages_by_session(
 
 
 # ───────────────────────────────────────────
-# 8. 유사 메시지 검색 (대화 RAG)
+# 9. 유사 메시지 검색 (대화 RAG)
 # ───────────────────────────────────────────
 def search_similar_messages(
     db                : Session,
