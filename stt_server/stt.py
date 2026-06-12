@@ -5,7 +5,9 @@ from faster_whisper import WhisperModel
 from pydub import AudioSegment
 
 from core.config import settings
-from core.constant import STT_HALLUCINATION_PHRASES, STT_INITIAL_PROMPT
+from core.constants.speech import (
+    STT_HALLUCINATION_PHRASES, STT_INITIAL_PROMPT
+)
 
 
 # ─────────────────────────────────────
