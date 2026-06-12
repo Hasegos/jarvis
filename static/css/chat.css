@@ -254,6 +254,9 @@ body::before {
 .chat-messages__item {
   max-width: 72%;
   min-width: 0;
+  min-height: calc(1.68em + 22px);
+  flex-shrink: 0;
+  box-sizing: border-box;  
   padding: 11px 16px;
   line-height: 1.68;
   font-size: 1.0rem;
