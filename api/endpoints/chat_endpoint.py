@@ -1,8 +1,13 @@
 import time, base64, json
 
 from fastapi.responses import StreamingResponse  
-from fastapi import APIRouter, BackgroundTasks, Depends, status, HTTPException
-from services.chat_service import run_summary_background, process_message_stream
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    status,
+    HTTPException
+)
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -10,8 +15,17 @@ from core.logger import get_logger
 from db.session import get_db
 from schemas.chat_schema import ChatRequest
 from models.session_model import Session as ChatSession
+from crud.chat_crud import (
+    get_all_messages_by_session,
+    delete_session
+)
 from services.tts_service import synthesize
-from crud.chat_crud import get_all_messages_by_session, delete_session
+from services.chat_service import (
+    run_summary_background,
+    process_message_stream,
+    _parse_memory_request
+)
+
 
 logger = get_logger("chat_endpoint")
 
@@ -54,7 +68,13 @@ async def send_message_stream(
                 # 답변 완성 — TTS + 백그라운드 등록 후 done 송출
                 # ──────────────────────────────────────────────
                 if ev["type"] == "answer_complete":
-                    background_tasks.add_task(run_summary_background, ev["session_id"])
+                    immediate_profile, forced_section = _parse_memory_request(req.message)
+                    background_tasks.add_task(
+                        run_summary_background,
+                        ev["session_id"],
+                        immediate_profile,
+                        forced_section,
+                    )
 
                     t0 = time.perf_counter()
                     audio_b64 = None
