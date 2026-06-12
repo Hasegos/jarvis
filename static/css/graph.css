@@ -620,7 +620,7 @@ a.sidebar__new-btn:visited {
   position: fixed;
   bottom: 62px;
   right: 20px;
-  width: 300px;
+  width: 330px;
   max-height: 420px;
   background: rgba(0,5,18,.96);
   border: 1px solid rgba(79,195,247,.3);
@@ -696,7 +696,7 @@ a.sidebar__new-btn:visited {
 .restore-modal__item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 14px;
   border-left: 2px solid transparent;
   transition: background .12s;
@@ -735,8 +735,24 @@ a.sidebar__new-btn:visited {
   border-radius: 3px;
   color: rgba(255,109,59,.7);
   font-family: var(--font);
-  font-size: 0.68rem;
-  padding: 4px 8px;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+}
+
+.restore-modal__item-del {
+  flex-shrink: 0;
+  background: rgba(239,83,80,.08); 
+  border: 1px solid rgba(239,83,80,.55);
+  border-radius: 3px;
+  color: #ef5350;
+  font-family: var(--font);
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  letter-spacing: 0.02em;
   cursor: pointer;
   white-space: nowrap;
   transition: all .15s;
@@ -746,6 +762,12 @@ a.sidebar__new-btn:visited {
   background: rgba(255,109,59,.1);
   border-color: var(--orange);
   color: var(--orange);
+}
+
+.restore-modal__item-del:hover {
+  background: rgba(239,83,80,.12);
+  border-color: #ef5350;
+  color: #ef5350;
 }
 
 .restore-modal__footer {
