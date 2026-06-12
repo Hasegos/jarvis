@@ -137,7 +137,18 @@ SESSION_IDLE_MINUTES = 30
 # ─────────────────────────────────────
 # 에이전트 루프 최대 반복 횟수 (도구 호출→결과→재호출).
 TOOL_MAX_ITERATIONS = 3
-
-WEB_SEARCH_MAX_RESULTS = 5
-
+WEB_SEARCH_MAX_RESULTS = 3
 WEB_SEARCH_REGION = "kr-kr"
+WEB_SEARCH_SNIPPET_MAX_CHARS = 200
+
+FORCE_SEARCH_KEYWORDS = frozenset({
+    "검색", "검색해", "검색해줘", "찾아서",
+    "찾아", "찾아줘", "찾아봐"
+})
+
+
+# ─────────────────────────────────────
+# 10. thinking 여부에따른 토큰값
+# ─────────────────────────────────────
+ANSWER_MAX_TOKENS_SIMPLE   = 2048
+ANSWER_MAX_TOKENS_THINKING = 8192
