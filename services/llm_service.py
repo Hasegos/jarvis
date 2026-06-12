@@ -145,7 +145,11 @@ def generate_summary(history: list[dict]) -> str:
 # ─────────────────────────────────────
 # 5. 기억 프로필 갱신 추출
 # ─────────────────────────────────────
-def extract_profile_updates(profile_text: str, conversation: str) -> list[dict]:
+def extract_profile_updates(
+        profile_text: str,
+        conversation: str,
+        forced_section: str | None = None
+) -> list[dict]:
     """
     현재 프로필과 대화를 보고, 갱신할 섹션만 JSON 배열로 추출한다.
 
@@ -155,6 +159,7 @@ def extract_profile_updates(profile_text: str, conversation: str) -> list[dict]:
     Args:
         profile_text: 현재 전체 프로필 텍스트 (섹션별 마크다운 합본)
         conversation: 최근 대화 텍스트
+        forced_section: 지정 시 추출된 모든 사실을 이 섹션에 강제 저장. None이면 LLM 자동 분류.
     Returns:
         [{"section": str, "content": str}, ...]. 변경 없음/실패 시 [].
     """
@@ -162,6 +167,7 @@ def extract_profile_updates(profile_text: str, conversation: str) -> list[dict]:
         sections=", ".join(PROFILE_SECTIONS),
         profile=profile_text or "(empty)",
         conversation=conversation,
+        forced_section=forced_section or "(none)",
     )
     try:
         response = lm_client.chat.completions.create(
@@ -178,7 +184,7 @@ def extract_profile_updates(profile_text: str, conversation: str) -> list[dict]:
         raw = strip_thinking(raw).strip()
 
         # ──────────────────────────────────────
-        # 8-1. JSON 파싱 (코드펜스/잡텍스트 방어)
+        # 5-1. JSON 파싱 (코드펜스/잡텍스트 방어)
         # ──────────────────────────────────────
         start = raw.find("[")
         end   = raw.rfind("]")
@@ -423,10 +429,6 @@ def stream_chat_with_tools(
         # 7-1. 스트리밍 호출 (도구 스펙 포함)
         # ──────────────────────────────────────
         iter_thinking = use_thinking
-        # force_search: 1회차에만 도구 호출을 강제('required')한다. LM Studio 는 특정
-        # 함수 지정(object) tool_choice 를 거부하므로 'required'(아무 도구나 1개 강제)를 쓴다.
-        # 검색 결과를 받는 2회차부터는 'auto' 로 풀어, 모델이 결과로 답을 생성하게 한다.
-        # (계속 강제하면 매 회차 검색만 반복하다 루프 끝에 강제 종료됨)
         iter_tool_choice = (
             "required"
             if (force_search and iteration == 1)
@@ -543,9 +545,7 @@ def stream_chat_with_tools(
             acc = tool_acc[i]
             status_text, speech_text = _tool_status_texts(acc["name"], acc["arguments"])
             yield {"type": "status", "text": status_text, "speech": speech_text}
-            t_tool = time.perf_counter()
             result = execute_tool(acc["name"], acc["arguments"])
-            logger.debug("도구 %s: %.2fs, 결과=%d자", acc["name"], time.perf_counter() - t_tool, len(result))
             messages.append({
                 "role": "tool",
                 "tool_call_id": acc["id"],
