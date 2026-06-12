@@ -12,34 +12,35 @@ const PI        = Math.PI;
 
 // BEM 클래스명 상수
 const CSS = Object.freeze({
-  SIDEBAR_ITEM     : 'sidebar__item',
-  SIDEBAR_INFO     : 'sidebar__item-info',
-  SIDEBAR_KEYWORD  : 'sidebar__item-keyword',
-  SIDEBAR_DATE     : 'sidebar__item-date',
-  SIDEBAR_DEL      : 'sidebar__item-del',
-  TOOLTIP          : 'node-tooltip',
-  TOOLTIP_VISIBLE  : 'node-tooltip--visible',
-  TOOLTIP_KEY      : 'node-tooltip__key',
-  RESTORE_BTN      : 'restore-btn',
-  RESTORE_BTN_VIS  : 'restore-btn--visible',
-  RESTORE_OVL      : 'restore-overlay',
-  RESTORE_OVL_VIS  : 'restore-overlay--visible',
-  RESTORE_MOD      : 'restore-modal',
-  RESTORE_MOD_VIS  : 'restore-modal--visible',
-  RM_HEADER        : 'restore-modal__header',
-  RM_TITLE         : 'restore-modal__title',
-  RM_CLOSE         : 'restore-modal__close',
-  RM_LIST          : 'restore-modal__list',
-  RM_ITEM          : 'restore-modal__item',
-  RM_INFO          : 'restore-modal__item-info',
-  RM_KW            : 'restore-modal__item-kw',
-  RM_DT            : 'restore-modal__item-dt',
-  RM_BTN           : 'restore-modal__item-btn',
-  RM_FOOTER        : 'restore-modal__footer',
-  RM_ALL           : 'restore-modal__restore-all',
-  SP_BODY_COLL     : 'status-panel__body--collapsed',
-  SP_ARROW         : 'status-panel__arrow',
-  SP_ARROW_UP      : 'status-panel__arrow--up',
+    SIDEBAR_ITEM     : 'sidebar__item',
+    SIDEBAR_INFO     : 'sidebar__item-info',
+    SIDEBAR_KEYWORD  : 'sidebar__item-keyword',
+    SIDEBAR_DATE     : 'sidebar__item-date',
+    SIDEBAR_DEL      : 'sidebar__item-del',
+    TOOLTIP          : 'node-tooltip',
+    TOOLTIP_VISIBLE  : 'node-tooltip--visible',
+    TOOLTIP_KEY      : 'node-tooltip__key',
+    RESTORE_BTN      : 'restore-btn',
+    RESTORE_BTN_VIS  : 'restore-btn--visible',
+    RESTORE_OVL      : 'restore-overlay',
+    RESTORE_OVL_VIS  : 'restore-overlay--visible',
+    RESTORE_MOD      : 'restore-modal',
+    RESTORE_MOD_VIS  : 'restore-modal--visible',
+    RM_HEADER        : 'restore-modal__header',
+    RM_TITLE         : 'restore-modal__title',
+    RM_CLOSE         : 'restore-modal__close',
+    RM_LIST          : 'restore-modal__list',
+    RM_ITEM          : 'restore-modal__item',
+    RM_INFO          : 'restore-modal__item-info',
+    RM_KW            : 'restore-modal__item-kw',
+    RM_DT            : 'restore-modal__item-dt',
+    RM_BTN           : 'restore-modal__item-btn',
+    RM_DEL           : 'restore-modal__item-del',
+    RM_FOOTER        : 'restore-modal__footer',
+    RM_ALL           : 'restore-modal__restore-all',
+    SP_BODY_COLL     : 'status-panel__body--collapsed',
+    SP_ARROW         : 'status-panel__arrow',
+    SP_ARROW_UP      : 'status-panel__arrow--up',
 });
 
 /**
@@ -49,9 +50,10 @@ const CSS = Object.freeze({
  * @returns {{ w: number, h: number }}
  */
 function getSize() {
-  return { 
-    w: window.innerWidth - SIDEBAR_W,
-    h: window.innerHeight - HEADER_H };
+    return { 
+        w: window.innerWidth - SIDEBAR_W,
+        h: window.innerHeight - HEADER_H 
+    };
 }
 
 /**
@@ -830,7 +832,14 @@ function showRestoreModal() {
             else closeRestoreModal();
         };
 
-        item.appendChild(info); item.appendChild(btn);
+        const delBtn = document.createElement('button');
+        delBtn.className = CSS.RM_DEL;
+        delBtn.textContent = '🗑 삭제';
+        delBtn.onclick = () => deleteSession(parseInt(item.dataset.id, 10));
+
+        item.appendChild(info); 
+        item.appendChild(btn);
+        item.appendChild(delBtn);
         list.appendChild(item);
     });
 
@@ -927,7 +936,28 @@ function buildSidebar(sessions) {
 }
 
 /**
- * 13. 초기화 + 자동 갱신
+ * 13. 세션을 DB에서 영구 삭제한다. (복구 불가)
+ * 
+ * @param {number} id - 삭제할 세션 ID
+ */
+async function deleteSession(id) {
+    if (!confirm(`세션 #${id} 을(를) 영구 삭제할까요?\n대화가 DB에서 완전히 삭제되며 복구할 수 없습니다.`)) return;
+    try {
+        await apiFetch(API_ENDPOINTS.session(id), { method: 'DELETE' });
+    } catch (e) {
+        console.error('세션 삭제 실패', e);
+        alert(e instanceof ApiError ? `삭제 실패 (${e.status})` : '삭제 연결 오류가 발생했습니다.');
+        return;
+    }
+    restoreSession(id);
+    _lastSessionsJson = '';
+    loadSessions();
+    if (getHidden().size > 0) showRestoreModal();
+    else closeRestoreModal();
+}
+
+/**
+ * 14. 초기화 + 자동 갱신
  */
 let _lastSessionsJson = '';
 
