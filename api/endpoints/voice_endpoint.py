@@ -1,12 +1,25 @@
 import base64, time
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status
+)
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from db.session import get_db
-from services.chat_service import process_message, run_summary_background
+from services.chat_service import (
+    process_message,
+    run_summary_background,
+    _parse_memory_request
+)
 from services.stt_service import transcribe_audio
 from services.tts_service import synthesize
 
@@ -97,7 +110,13 @@ async def voice_chat(
     # ──────────────────────────────────────
     # 1-4. 백그라운드 요약 갱신
     # ──────────────────────────────────────
-    background_tasks.add_task(run_summary_background, session.session_id)
+    immediate_profile, forced_section = _parse_memory_request(user_text)
+    background_tasks.add_task(
+        run_summary_background,
+        session.session_id,
+        immediate_profile,
+        forced_section,
+    )
 
     # ──────────────────────────────────────
     # 1-5. JSON 반환
