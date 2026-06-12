@@ -70,9 +70,21 @@ PROFILE_ALWAYS_INJECT = ["Identity"]
 
 PROFILE_SECTION_KEYWORDS = {
     "Preferences": ["선호", "좋아하는", "싫어", "취향", "스타일"],
-    "Hobbies":     ["취미", "좋아", "게임", "관심사", "여가"],
+    "Hobbies":     ["취미", "좋아", "게임", "관심사", "여가", "강아지", "반려동물", "애완", "펫"],
     "Schedule":    ["일정", "약속", "스케줄", "언제", "날짜", "계획"],
     "Projects":    ["프로젝트", "작업", "개발", "만들", "코드"],
+}
+
+MEMORY_KEYWORDS = frozenset({
+    "기억해", "기억해줘", "외워", "외워줘", "저장해", "저장해줘",
+})
+
+SECTION_ALIASES = {
+    "신원": "Identity", "정보": "Identity",
+    "선호도": "Preferences", "선호": "Preferences", "취향": "Preferences",
+    "취미": "Hobbies",
+    "일정": "Schedule", "스케줄": "Schedule",
+    "프로젝트": "Projects", "작업": "Projects",
 }
 
 # 프로필 갱신 추출 프롬프트.
@@ -91,12 +103,16 @@ Rules:
 - content is the COMPLETE markdown for that section in ENGLISH, as "- key: value" bullet lines.
 - NEVER delete existing facts. Keep all current lines and ADD/UPDATE as needed.
 - If a fact changes (e.g. a name correction), update that line, keep the rest.
+- Section guide for choosing the right section: a person's name, pets, family, residence/location are durable identity facts -> "Identity". Likes/dislikes/taste -> "Preferences". Hobbies/games/interests -> "Hobbies". Appointments/dates/plans -> "Schedule". Work/dev/projects -> "Projects".
+- If FORCED_SECTION below is not "(none)", put ALL extracted facts into that exact section, ignoring the section guide.
 
 CURRENT PROFILE:
 {profile}
 
 RECENT CONVERSATION:
 {conversation}
+
+FORCED_SECTION: {forced_section}
 
 JSON:"""
 
@@ -129,7 +145,6 @@ WIKI_MAX_CHARS = 1500
 # 8. 세션·백그라운드 주기
 # ──────────────────────────────────────
 SUMMARY_EVERY_N_TURNS = 2
-SESSION_IDLE_MINUTES = 30
 
 
 # ─────────────────────────────────────
@@ -140,6 +155,7 @@ TOOL_MAX_ITERATIONS = 3
 WEB_SEARCH_MAX_RESULTS = 3
 WEB_SEARCH_REGION = "kr-kr"
 WEB_SEARCH_SNIPPET_MAX_CHARS = 200
+WEB_SEARCH_TIMEOUT = 10 # ddgs 외부 호출 타임아웃(초)
 
 FORCE_SEARCH_KEYWORDS = frozenset({
     "검색", "검색해", "검색해줘", "찾아서",
