@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from models.session_model import Session as ChatSession
 from models.message_model import Message
-from core.constant import(
+from core.constants.memory import(
     RAG_TOP_K,
     RAG_MAX_DISTANCE,
 )
