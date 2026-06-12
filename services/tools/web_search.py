@@ -3,7 +3,11 @@ import json
 from ddgs import DDGS
 
 from core.logger import get_logger
-from core.constant import WEB_SEARCH_MAX_RESULTS, WEB_SEARCH_REGION
+from core.constant import (
+    WEB_SEARCH_MAX_RESULTS,
+    WEB_SEARCH_REGION,
+    WEB_SEARCH_SNIPPET_MAX_CHARS
+)
 
 logger = get_logger("tool.web_search")
 
@@ -17,9 +21,12 @@ SPEC = {
         "name": "web_search",
         "description": (
             "웹에서 최신 정보를 검색한다. "
-            "시세·날씨·뉴스 등 실시간 정보, 학습 데이터에 없는 최신 사실, "
-            "확인이 필요한 정보에만 사용한다. "
-            "일상 대화나 이미 아는 일반 지식에는 사용하지 않는다."
+            "날씨·시세·뉴스·환율 등 시간에 따라 변하는 실시간 정보는 "
+            "과거 대화나 이전 답변에 비슷한 내용이 있더라도 "
+            "반드시 이 도구로 다시 검색해 최신 값을 확인한다. "
+            "학습 데이터에 없는 최신 사실, 확인이 필요한 정보에도 사용한다. "
+            "단순 인사나 일반 상식에는 사용하지 않는다. "
+            "검색은 한 번만 수행하고, 결과를 받은 뒤 1~3문장으로 간결히 답한다."
         ),
         "parameters": {
             "type": "object",
@@ -69,7 +76,7 @@ def run(args: dict) -> str:
         {
             "title"  : r.get("title", ""),
             "url"    : r.get("href", ""),
-            "snippet": r.get("body", ""),
+            "snippet": (r.get("body", "") or "")[:WEB_SEARCH_SNIPPET_MAX_CHARS],
         }
         for r in rows
     ]
