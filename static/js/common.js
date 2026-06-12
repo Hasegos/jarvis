@@ -7,10 +7,11 @@
  * 1. API 엔드포인트 상수
  */
 const API_ENDPOINTS = Object.freeze({
-  chat    : '/api/v1/chat',
+  chatStream: '/api/v1/chat/stream',
   voice   : '/api/v1/voice',
   sessions: '/api/v1/chat/sessions',
   messages: id => `/api/v1/chat/sessions/${id}/messages`,
+  session : id => `/api/v1/chat/sessions/${id}`,
 });
 
 /**
