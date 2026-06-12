@@ -35,16 +35,29 @@ function initDom() {
 
 /**
  * 3. UI 헬퍼
- * 
- * @param {*} role 
- * @param {*} text 
+ *
+ * @param {string} role - 'user' 또는 'assistant'
+ * @param {string} text - 표시할 텍스트
+ * @returns {HTMLDivElement} 생성된 말풍선 요소 (스트리밍 갱신용)
  */
+/**
+ * 채팅 영역이 바닥 근처면 맨 아래로 스크롤한다.
+ * 스트리밍 중 매 토큰마다 강제 스크롤하면 출렁이므로, 사용자가
+ * 위로 올려둔 경우엔 건드리지 않는다.
+ */
+function scrollToBottomIfNear() {
+  const box = dom.chatBox;
+  const near = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  if (near) box.scrollTop = box.scrollHeight;
+}
+
 function addMessage(role, text) {
   const div       = document.createElement('div');
   div.className   = `${CSS.MSG_ITEM} ${role === 'user' ? CSS.MSG_USER : CSS.MSG_ASSISTANT}`;
   div.textContent = text;   // textContent → XSS 방지
   dom.chatBox.appendChild(div);
   dom.chatBox.scrollTop = dom.chatBox.scrollHeight;
+  return div;               // 스트리밍 중 textContent 를 갱신하기 위해 요소를 반환
 }
 
 /**
@@ -112,9 +125,10 @@ async function loadSession() {
 }
 
 /**
- * 5. 텍스트 전송
- * 
- * @returns 
+ * 5. 텍스트 전송 (SSE 스트리밍)
+ *
+ * 토큰이 도착하는 대로 말풍선에 실시간 표시하고,
+ * 도구 실행 중에는 상태 문구를 보여준다.
  */
 async function sendText() {
   const message = dom.textInput.value.trim();
@@ -124,21 +138,57 @@ async function sendText() {
   addMessage('user', message);
   setLoading(true);
 
+  const bubble = addMessage('assistant', '');
+  dom.chatBox.scrollTop = dom.chatBox.scrollHeight;  // 말풍선 생성 직후 바닥 고정
+  let answerText = '';
+
   try {
-    const data = await apiFetch(API_ENDPOINTS.chat, {
-      method: 'POST',
-      body  : JSON.stringify({ session_id: currentSessionId, message }),
+    const res = await fetch(API_ENDPOINTS.chatStream, {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ session_id: currentSessionId, message }),
     });
+    if (!res.ok) throw new ApiError(res.status, await res.text());
 
-    updateSessionId(data.session_id);
-    addMessage('assistant', data.answer);
-    if (data.audio_b64) await playAudio(data.audio_b64);
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
 
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 2);
+        if (!line.startsWith('data:')) continue;
+
+        const ev = JSON.parse(line.slice(5));
+
+        if (ev.type === 'token') {
+          answerText += ev.text;
+          bubble.textContent = answerText;
+          scrollToBottomIfNear();
+        } else if (ev.type === 'status') {
+          if (!answerText) bubble.textContent = `⏳ ${ev.text}`;
+          if (ev.audio_b64) playAudio(ev.audio_b64);
+        } else if (ev.type === 'done') {
+          updateSessionId(ev.session_id);
+          bubble.textContent = ev.answer;
+          scrollToBottomIfNear();
+          if (ev.audio_b64) playAudio(ev.audio_b64);
+        } else if (ev.type === 'error') {
+          bubble.textContent = `오류: ${ev.message}`;
+        }
+      }
+    }
   } catch (e) {
     const msg = e instanceof ApiError
       ? `서버 오류 (${e.status}). 다시 시도해 주세요.`
       : '연결 오류가 발생했습니다. 다시 시도해 주세요.';
-    addMessage('assistant', msg);
+    bubble.textContent = msg;
     console.error('sendText 실패:', e);
   } finally {
     setLoading(false);
