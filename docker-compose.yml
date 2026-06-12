@@ -7,7 +7,7 @@ services:
     build: .
     container_name: jarvis
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - .env
     depends_on:
@@ -30,7 +30,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD}
       POSTGRES_DB: ${POSTGRESQL_DATABASE}
     ports:
-      - "15432:5432"
+      - "127.0.0.1:15432:5432"
     volumes:
       - jarvis_db_data:/var/lib/postgresql/data
     healthcheck:
