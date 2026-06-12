@@ -1,7 +1,7 @@
 from openai import APIConnectionError, APITimeoutError
 
 from core.config import settings
-from services.lm_client import lm_client
+from services.llm.lm_client import lm_client
 
 
 # ─────────────────────
