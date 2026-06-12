@@ -6,7 +6,8 @@ from core.logger import get_logger
 from core.constant import (
     WEB_SEARCH_MAX_RESULTS,
     WEB_SEARCH_REGION,
-    WEB_SEARCH_SNIPPET_MAX_CHARS
+    WEB_SEARCH_SNIPPET_MAX_CHARS,
+    WEB_SEARCH_TIMEOUT
 )
 
 logger = get_logger("tool.web_search")
@@ -62,7 +63,7 @@ def run(args: dict) -> str:
         return json.dumps({"error": "검색어가 비어 있습니다"}, ensure_ascii=False)
 
     try:
-        with DDGS() as ddgs:
+        with DDGS(timeout=WEB_SEARCH_TIMEOUT) as ddgs:
             rows = list(ddgs.text(
                 query,
                 region=WEB_SEARCH_REGION,
