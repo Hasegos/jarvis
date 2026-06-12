@@ -1,0 +1,114 @@
+from core.config import settings
+from core.constants.prompts import SYSTEM_PROMPT
+from services.llm.lm_client import lm_client
+from services.llm.text_utils import strip_thinking
+
+
+# ─────────────────────────────────────
+# 1. 메시지 빌드 (시스템 프롬프트 + 컨텍스트 주입)
+# ─────────────────────────────────────
+def _build_messages(
+    history: list[dict],
+    context: str | None = None,
+    use_thinking: bool = False,
+    force_search: bool = False,
+) -> list[dict]:
+    """
+    대화 히스토리 앞에 시스템 프롬프트를 prepend한다.
+
+    컨텍스트(프로필+위키+RAG 합본)가 있으면 시스템 프롬프트 뒤
+    별도 system 메시지로 주입한다. 강제검색 지시는 stale history 에
+    묻히지 않도록 메시지 맨 끝(user 턴 뒤)에 붙인다.
+
+    Args:
+        history     : user/assistant 대화 히스토리
+        context     : 프로필/위키/RAG 참고 블록. None이면 주입 안 함.
+        use_thinking: thinking 활성화 여부 (호환용 인자, 현재 메시지 구성엔 미반영).
+        force_search: True 면 web_search 강제 지시를 맨 끝에 주입.
+    Returns:
+        시스템 프롬프트(+컨텍스트, +강제검색 지시) 포함 메시지 리스트
+    """
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if context:
+        messages.append({"role": "system", "content": context})
+    messages = messages + history
+    if force_search:
+        messages.append({
+            "role": "system",
+            "content": (
+                "사용자가 검색을 명시적으로 요청했습니다. "
+                "과거 대화나 이전 답변에 비슷한 내용이 있더라도 신뢰하지 말고, "
+                "반드시 web_search 도구를 먼저 호출해 최신 정보를 확인한 뒤 답하세요."
+            ),
+        })
+    return messages
+
+
+# ─────────────────────────────────────
+# 2. LLM 공통 호출 파라미터
+# ─────────────────────────────────────
+def build_llm_kwargs(use_thinking: bool, max_tokens: int) -> dict:
+    """
+    채팅 LLM 호출에 공통으로 들어가는 kwargs 를 한곳에서 만든다.
+
+    에이전트 루프 4곳(블로킹/스트리밍 × 본루프/폴백)에 중복돼 있던
+    파라미터를 통합해, 값 변경 시 한 곳만 고치면 되게 한다.
+
+    Args:
+        use_thinking: thinking 활성화 여부
+        max_tokens  : 답변 토큰 상한
+    Returns:
+        chat.completions.create 에 펼쳐 넣을 kwargs dict
+    """
+    return {
+        "model": settings.LM_STUDIO_MODEL,
+        "timeout": settings.LM_STUDIO_TIMEOUT,
+        "temperature": settings.LLM_TEMPERATURE,
+        "top_p": settings.LLM_TOP_P,
+        "max_tokens": max_tokens,
+        "extra_body": {
+            "chat_template_kwargs": {"enable_thinking": use_thinking},
+            "top_k": settings.LLM_TOP_K,
+            "repeat_penalty": settings.LLM_REPEAT_PENALTY,
+        },
+    }
+
+
+# ─────────────────────
+# 3. 세션 한 단어 요약
+# ─────────────────────
+def generate_summary(history: list[dict]) -> str:
+    """
+    대화 내용을 주제를 나타내는 한 단어로 요약한다.
+
+    Args:
+        history: user/assistant 대화 히스토리
+    Returns:
+        한 단어 요약. 실패 시 빈 문자열.
+    """
+    conversation = "\n".join(
+        f"{m['role']}: {m['content']}" for m in history
+    )
+    prompt = (
+        "/no_think\n"
+        "다음 대화의 핵심 주제를 한국어 명사 한 단어로만 답해. "
+        "예시: 코딩, 날씨, 요리, 역사\n"
+        "단어 하나만 출력해. 문장 금지. 설명 금지.\n\n"
+        f"{conversation}"
+    )
+    try:
+        response = lm_client.chat.completions.create(
+            model=settings.LM_STUDIO_MODEL,
+            messages=[
+                {"role": "system", "content": "너는 대화 주제를 한 단어로 분류하는 분류기야."},
+                {"role": "user",   "content": prompt},
+            ],
+            timeout=settings.LM_STUDIO_TIMEOUT,
+            temperature=0.1,
+            max_tokens=20,
+        )
+        content = response.choices[0].message.content or ""
+        word = strip_thinking(content).strip().split()[0] if content.strip() else ""
+        return word
+    except Exception as e:
+        raise RuntimeError(f"요약 생성 오류: {e}")

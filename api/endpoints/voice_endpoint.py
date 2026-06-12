@@ -15,13 +15,11 @@ from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from db.session import get_db
-from services.chat_service import (
-    process_message,
-    run_summary_background,
-    _parse_memory_request
-)
-from services.stt_service import transcribe_audio
-from services.tts_service import synthesize
+from services.chat_service import process_message
+from services.memory.background_service import run_summary_background
+from services.memory.profile_service import _parse_memory_request
+from services.speech.stt_service import transcribe_audio
+from services.speech.tts_service import synthesize
 
 logger = get_logger("voice_endpoint")
 

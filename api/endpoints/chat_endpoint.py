@@ -1,6 +1,6 @@
 import time, base64, json
 
-from fastapi.responses import StreamingResponse  
+from fastapi.responses import StreamingResponse
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -19,12 +19,10 @@ from crud.chat_crud import (
     get_all_messages_by_session,
     delete_session
 )
-from services.tts_service import synthesize
-from services.chat_service import (
-    run_summary_background,
-    process_message_stream,
-    _parse_memory_request
-)
+from services.chat_service import process_message_stream
+from services.memory.background_service import run_summary_background
+from services.memory.profile_service import _parse_memory_request
+from services.speech.tts_service import synthesize
 
 
 logger = get_logger("chat_endpoint")

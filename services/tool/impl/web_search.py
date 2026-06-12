@@ -3,11 +3,11 @@ import json
 from ddgs import DDGS
 
 from core.logger import get_logger
-from core.constant import (
+from core.constants.tool import (
     WEB_SEARCH_MAX_RESULTS,
     WEB_SEARCH_REGION,
     WEB_SEARCH_SNIPPET_MAX_CHARS,
-    WEB_SEARCH_TIMEOUT
+    WEB_SEARCH_TIMEOUT,
 )
 
 logger = get_logger("tool.web_search")
@@ -83,3 +83,23 @@ def run(args: dict) -> str:
     ]
     logger.debug("web_search: query=%r results=%d", query, len(results))
     return json.dumps({"results": results}, ensure_ascii=False)
+
+
+# ─────────────────────
+# 3. 도구 안내 문구
+# ─────────────────────
+def announce(args: dict) -> tuple[str, str]:
+    """
+    이 도구 실행을 (화면 표시용, 음성 안내용) 두 문구로 변환한다.
+
+    도구의 안내는 도구 자신이 정의한다 — 도구 추가 시 이 파일 하나로 끝.
+
+    Args:
+        args: 모델이 생성한 도구 인자 dict
+    Returns:
+        (status_text, speech_text)
+    """
+    query = (args.get("query") or "").strip()
+    if query:
+        return (f"검색 중: {query}", f"{query}, 검색해 보겠습니다.")
+    return ("검색 중...", "검색해 보겠습니다.")

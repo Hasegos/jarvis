@@ -3,7 +3,7 @@ from pathlib import Path
 
 from core.config import settings
 from core.logger import get_logger
-from core.constant import (
+from core.constants.wiki import (
     WIKI_SUBDIR, WIKI_EXCLUDE_NAMES,
     WIKI_SCORE_FILENAME_EXACT, WIKI_SCORE_FILENAME_PARTIAL,
     WIKI_SCORE_HEADING, WIKI_SCORE_BODY,
