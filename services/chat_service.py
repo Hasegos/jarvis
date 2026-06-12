@@ -31,10 +31,14 @@ from services.llm_service import (
 )
 from core.constant import (
     SYSTEM_PROMPT,
-    THINKING_KEYWORDS, THINKING_LENGTH_THRESHOLD,
-    PROFILE_ALWAYS_INJECT, PROFILE_SECTION_KEYWORDS,
+    THINKING_KEYWORDS,
+    THINKING_LENGTH_THRESHOLD,
+    PROFILE_ALWAYS_INJECT,
+    PROFILE_SECTION_KEYWORDS,
     SUMMARY_EVERY_N_TURNS,
     FORCE_SEARCH_KEYWORDS,
+    MEMORY_KEYWORDS,
+    SECTION_ALIASES
 )
 
 logger = get_logger("chat_service")
@@ -43,16 +47,19 @@ logger = get_logger("chat_service")
 # ─────────────────────────────────────
 # 1. 세션 요약 백그라운드 실행
 # ─────────────────────────────────────
-def run_summary_background(session_id: int) -> None:
+def run_summary_background(
+        session_id: int,
+        immediate_profile: bool = False,
+        forced_section: str | None = None,
+) -> None:
     """
     세션의 전체 대화를 한 단어로 요약하고, 기억 프로필을 갱신한다.
 
-    자체 DB 세션을 생성하므로 BackgroundTasks에서 안전하게 실행된다.
-    비용 절감을 위해 매 메시지가 아니라 SUMMARY_EVERY_N_TURNS 턴마다 한 번만 실행한다.
-    (요약과 프로필 갱신이 같은 주기로 함께 돈다)
-
     Args:
         session_id: 요약할 세션 PK
+    immediate_profile: True 면 2턴 주기 게이트와 무관하게 프로필을 즉시 갱신
+                    ("기억해줘" 등 명시적 기억 요청 시)
+    forced_section   : 강제 저장할 영어 섹션명. None이면 LLM 자동 분류.
     """
 
     logger.debug("요약 태스크 시작: session=%d", session_id)
@@ -67,34 +74,35 @@ def run_summary_background(session_id: int) -> None:
         # 1-1. 요약 주기 게이트 (비용 절감)
         # ──────────────────────────────────────
         assistant_turns = sum(1 for m in messages if m.role == "assistant")
-        if assistant_turns % SUMMARY_EVERY_N_TURNS != 1:
-            logger.debug("요약 스킵: session=%d turns=%d", session_id, assistant_turns)
-            return
+        gate_open = (assistant_turns % SUMMARY_EVERY_N_TURNS == 1)
 
         history = [{"role": m.role, "content": m.content} for m in messages]
 
         # ──────────────────────────────────────
         # 1-2. 세션 요약
         # ──────────────────────────────────────
-        try:
-            summary = generate_summary(history)
-            logger.debug("summary 생성 결과: session=%d summary=%r", session_id, summary)
-
-            if summary:
-                update_session_summary(db, session_id, summary)
-                logger.debug("session=%d summary=%s", session_id, summary)
-            else:
-                logger.warning("summary 빈 문자열: session=%d", session_id)
-        except Exception as e:
-            logger.warning("요약 생성 실패 (무시): %s", e)
+        if gate_open:
+            try:
+                summary = generate_summary(history)
+                logger.debug("summary 생성 결과: session=%d summary=%r", session_id, summary)
+                if summary:
+                    update_session_summary(db, session_id, summary)
+                    logger.debug("session=%d summary=%s", session_id, summary)
+                else:
+                    logger.warning("summary 빈 문자열: session=%d", session_id)
+            except Exception as e:
+                logger.warning("요약 생성 실패 (무시): %s", e)
+        else:
+            logger.debug("요약 스킵(주기): session=%d turns=%d", session_id, assistant_turns)
 
         # ──────────────────────────────────────
         # 1-3. 기억 프로필 갱신 (요약과 같은 주기)
         # ──────────────────────────────────────
-        try:
-            _update_memory_profile(db, history)
-        except Exception as e:
-            logger.warning("프로필 갱신 실패 (무시): %s", e)
+        if gate_open or immediate_profile:
+            try:
+                _update_memory_profile(db, history, forced_section)
+            except Exception as e:
+                logger.warning("프로필 갱신 실패 (무시): %s", e)
     except Exception as e:
         logger.warning("백그라운드 태스크 실패 (무시): %s", e)
     finally:
@@ -152,7 +160,40 @@ def _should_force_search(user_text: str) -> bool:
 
 
 # ─────────────────────────────────────
-# 4. 과거 대화 검색 (RAG 컨텍스트 구성)
+# 4. 기억(프로필 저장) 요청 판단
+# ─────────────────────────────────────
+def _parse_memory_request(user_text: str) -> tuple[bool, str | None]:
+    """
+    입력이 명시적 기억 요청('기억해줘' 등)인지, 특정 섹션을 찍었는지 판단한다.
+
+    - MEMORY_KEYWORDS 가 있으면 즉시 저장 대상(2턴 게이트 우회).
+    - SECTION_ALIASES 의 한국어 별칭이 같이 있으면 그 섹션으로 강제 저장.
+        (없으면 forced_section=None → LLM 자동 분류)
+
+    Args:
+        user_text: 사용자 입력 텍스트
+    Returns:
+        (is_memory_request, forced_section)
+        - is_memory_request: 명시적 기억 요청 여부
+        - forced_section   : 강제 저장할 영어 섹션명. 없으면 None.
+    """
+    lowered = user_text.lower()
+
+    is_memory = any(kw in lowered for kw in MEMORY_KEYWORDS)
+    if not is_memory:
+        return False, None
+
+    forced_section = None
+    for alias, section in SECTION_ALIASES.items():
+        if alias in lowered:
+            forced_section = section
+            break
+
+    return True, forced_section
+
+
+# ─────────────────────────────────────
+# 5. 과거 대화 검색 (RAG 컨텍스트 구성)
 # ─────────────────────────────────────
 def _build_rag_context(db: Session, query_embedding: list[float], current_session_id: int) -> str | None:
     """
@@ -178,7 +219,7 @@ def _build_rag_context(db: Session, query_embedding: list[float], current_sessio
 
 
 # ─────────────────────────────────────
-# 5. 기억 프로필 주입 (필수 + 키워드 매칭)
+# 6. 기억 프로필 주입 (필수 + 키워드 매칭)
 # ─────────────────────────────────────
 def _select_profile_sections(user_text: str) -> list[str]:
     """
@@ -200,6 +241,9 @@ def _select_profile_sections(user_text: str) -> list[str]:
     return list(dict.fromkeys(selected))
 
 
+# ─────────────────────────────────────
+# 7. 프로필 컨텍스트 블록 구성
+# ─────────────────────────────────────
 def _build_profile_context(db: Session, user_text: str) -> str | None:
     """
     선택된 프로필 섹션을 조회해 LLM 주입용 텍스트 블록으로 만든다.
@@ -228,9 +272,13 @@ def _build_profile_context(db: Session, user_text: str) -> str | None:
 
 
 # ─────────────────────────────────────
-# 6. 기억 프로필 갱신 (백그라운드)
+# 8. 기억 프로필 갱신 (백그라운드)
 # ─────────────────────────────────────
-def _update_memory_profile(db: Session, history: list[dict]) -> None:
+def _update_memory_profile(
+        db: Session,
+        history: list[dict],
+        forced_section: str | None = None
+) -> None:
     """
     대화에서 장기 기억할 사실을 추출해 프로필 섹션을 갱신한다.
 
@@ -240,6 +288,7 @@ def _update_memory_profile(db: Session, history: list[dict]) -> None:
     Args:
         db     : SQLAlchemy 세션
         history: 요약에 쓰인 전체 대화 히스토리
+        forced_section: 강제 저장 섹션명. None이면 LLM 자동 분류.
     """
     # 현재 프로필을 섹션별 텍스트로 합본
     sections = get_all_sections(db)
@@ -249,13 +298,13 @@ def _update_memory_profile(db: Session, history: list[dict]) -> None:
     )
     conversation = "\n".join(f"{m['role']}: {m['content']}" for m in history)
 
-    updates = extract_profile_updates(profile_text, conversation)
+    updates = extract_profile_updates(profile_text, conversation, forced_section)
     if not updates:
         logger.debug("프로필 갱신 없음")
         return
 
     # ──────────────────────────────────────
-    # 6-1. 줄 수 가드 후 섹션별 저장 (삭제 방지)
+    # 8-1. 줄 수 가드 후 섹션별 저장 (삭제 방지)
     # ──────────────────────────────────────
     for upd in updates:
         section  = upd["section"]
@@ -276,7 +325,7 @@ def _update_memory_profile(db: Session, history: list[dict]) -> None:
 
 
 # ─────────────────────────────────────
-# 7. 메시지 처리 (공통 파이프라인)
+# 9. 메시지 처리 (공통 파이프라인)
 # ─────────────────────────────────────
 async def process_message(
     db        : Session,
@@ -301,12 +350,12 @@ async def process_message(
     timings = {}
 
     # ──────────────────────────────────────
-    # 7-1. 세션 판단
+    # 9-1. 세션 판단
     # ──────────────────────────────────────
     session = await run_in_threadpool(get_or_create_session, db, session_id)
 
     # ──────────────────────────────────────
-    # 7-2. 대화 히스토리 구성
+    # 9-2. 대화 히스토리 구성
     # ──────────────────────────────────────
     messages = await run_in_threadpool(
         get_messages_by_session,
@@ -321,7 +370,7 @@ async def process_message(
     history.append({"role": "user", "content": user_text})
 
     # ──────────────────────────────────────
-    # 7-3. user 임베딩 + RAG/프로필 컨텍스트 구성
+    # 9-3. user 임베딩 + RAG/프로필 컨텍스트 구성
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     user_embedding = await run_in_threadpool(embed_text, user_text)
@@ -339,7 +388,7 @@ async def process_message(
     context = "\n\n".join(c for c in (profile_context, wiki_context, rag_context) if c) or None
 
     # ──────────────────────────────────────
-    # 7-4. LLM 호출
+    # 9-4. LLM 호출
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     use_thinking = _should_think(user_text)
@@ -354,14 +403,14 @@ async def process_message(
     timings["llm"] = round(time.perf_counter() - t0, 2)
 
     # ──────────────────────────────────────
-    # 7-5. assistant 임베딩
+    # 9-5. assistant 임베딩
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     assistant_embedding = await run_in_threadpool(embed_text, answer)
     timings["embedding"] = round(timings["embedding"] + (time.perf_counter() - t0), 2)
 
     # ──────────────────────────────────────
-    # 7-6. 메시지 저장
+    # 9-6. 메시지 저장
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     await run_in_threadpool(
@@ -376,7 +425,7 @@ async def process_message(
 
 
 # ─────────────────────────────────────
-# 8. 메시지 처리 (스트리밍 파이프라인, SSE용)
+# 10. 메시지 처리 (스트리밍 파이프라인, SSE용)
 # ─────────────────────────────────────
 async def process_message_stream(
     db        : Session,
@@ -394,7 +443,7 @@ async def process_message_stream(
         RuntimeError: LLM 또는 임베딩 오류
     """
     # ──────────────────────────────────────
-    # 8-1. 세션 + 히스토리 + 컨텍스트
+    # 10-1. 세션 + 히스토리 + 컨텍스트
     # ──────────────────────────────────────
     session = await run_in_threadpool(get_or_create_session, db, session_id)
 
@@ -422,19 +471,8 @@ async def process_message_stream(
 
     context = "\n\n".join(c for c in (profile_context, wiki_context, rag_context) if c) or None
 
-    _hist_chars = sum(len(m["content"]) for m in history)
-    logger.debug(
-        "[prefill] system=%d profile=%d wiki=%d rag=%d history=%d(msgs=%d) | context합=%d",
-        len(SYSTEM_PROMPT),
-        len(profile_context) if profile_context else 0,
-        len(wiki_context) if wiki_context else 0,
-        len(rag_context) if rag_context else 0,
-        _hist_chars, len(history),
-        len(context) if context else 0,
-    )
-
     # ──────────────────────────────────────
-    # 8-2. 스트리밍 LLM — 토큰을 즉시 중계하며 누적
+    # 10-2. 스트리밍 LLM — 토큰을 즉시 중계하며 누적
     # ──────────────────────────────────────
     use_thinking = _should_think(user_text)
     force_search = _should_force_search(user_text)
@@ -453,7 +491,7 @@ async def process_message_stream(
     answer = strip_markdown("".join(answer_parts).strip())
 
     # ──────────────────────────────────────
-    # 8-3. 임베딩 + 저장 (스트림 종료 후)
+    # 10-3. 임베딩 + 저장 (스트림 종료 후)
     # ──────────────────────────────────────
     assistant_embedding = await run_in_threadpool(embed_text, answer)
     await run_in_threadpool(
