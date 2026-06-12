@@ -46,12 +46,13 @@ def get_session_by_id(db: Session, session_id: int) -> ChatSession | None:
     ).first()
 
 
-# ─────────────────────────────────────
-# 3. 세션 판단 (시간 기반 자동 분기)
-# ─────────────────────────────────────
+# ───────────────────────────────────────────────
+# 3. 세션 판단 (있으면 이어 쓰고, 없으면 새로 생성)
+# ───────────────────────────────────────────────
 def get_or_create_session(db: Session, session_id: int | None) -> ChatSession:
     """
-    세션 ID가 있으면 시간 기반으로 유효성 판단, 없으면 새 세션 생성.
+    session_id가 있으면 그 세션을 이어 쓰고, 없으면 새 세션을 생성한다.
+    세션 분기는 session_id가 None(=새 대화)일 때만 발생한다.
 
     Args:
         db        : SQLAlchemy 세션
@@ -139,7 +140,7 @@ def delete_session(db: Session, session_id: int) -> bool:
 def get_messages_by_session(
     db        : Session,
     session_id: int,
-    limit     : int = 20,
+    limit     : int,
 ) -> list[Message]:
     """
     세션의 최근 메시지를 시간순으로 조회한다.
