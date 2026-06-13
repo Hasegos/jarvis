@@ -5,7 +5,7 @@ from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from core.config import settings
 from core.constants.llm import THINKING_KEYWORDS, THINKING_LENGTH_THRESHOLD
-from core.constants.tool import FORCE_SEARCH_KEYWORDS
+from core.constants.tool import FORCED_TOOL_KEYWORDS
 from core.logger import get_logger
 from crud.chat_crud import (
     create_message,
@@ -42,6 +42,7 @@ def _should_think(user_text: str) -> bool:
     mode = settings.LLM_THINKING_MODE.lower()
     if mode == "on":
         return True
+
     if mode == "off":
         return False
 
@@ -54,28 +55,34 @@ def _should_think(user_text: str) -> bool:
 
 
 # ─────────────────────────────────────
-# 2. web_search 강제 여부 판단
+# 2. 강제 도구 판단 (키워드 → 도구명 리스트)
 # ─────────────────────────────────────
-def _should_force_search(user_text: str) -> bool:
+def _resolve_forced_tools(user_text: str) -> list[str]:
     """
-    입력에 검색 명령 키워드(검색/찾아 등)가 있으면 web_search 를 강제한다.
+    입력의 키워드로 강제 호출할 도구들을 등장 순서대로 결정한다.
 
-    모델 자율 판단에 맡기면 stale 한 history 를 보고 검색을 건너뛰는 경우가
-    있어, 명시적 검색 요청 시에는 도구 호출을 강제하기 위한 플래그를 만든다.
-    (부분 문자열 매칭 — "검색엔진" 같은 단어에도 걸릴 수 있음)
+    FORCED_TOOL_KEYWORDS(도구명 → 키워드 묶음)에서 매칭되는 도구를 모두 찾되,
+    텍스트에 키워드가 처음 등장한 위치 순으로 정렬한다.
 
     Args:
         user_text: 사용자 입력 텍스트
     Returns:
-        web_search 강제 여부
+        강제할 도구 이름 리스트 (등장 순서). 매칭 없으면 빈 리스트.
     """
     lowered = user_text.lower()
-    return any(kw in lowered for kw in FORCE_SEARCH_KEYWORDS)
+    hits: list[tuple[int, str]] = []
+    for tool_name, keywords in FORCED_TOOL_KEYWORDS.items():
+        positions = [lowered.find(kw) for kw in keywords if kw in lowered]
+        if positions:
+            hits.append((min(positions), tool_name))
+
+    hits.sort(key=lambda x: x[0])
+    return [tool_name for _pos, tool_name in hits]
 
 
-# ─────────────────────────────────────
+# ──────────────────────────────────────────
 # 3. 턴 준비 (세션·히스토리·컨텍스트 공통 조립)
-# ─────────────────────────────────────
+# ──────────────────────────────────────────
 async def _prepare_turn(
     db        : Session,
     session_id: int | None,
@@ -119,9 +126,9 @@ async def _prepare_turn(
     ]
     history.append({"role": "user", "content": user_text})
 
-    # ──────────────────────────────────────
+    # ─────────────────────────────────────────
     # 3-2. user 임베딩 + 프로필/위키/RAG 컨텍스트
-    # ──────────────────────────────────────
+    # ─────────────────────────────────────────
     t0 = time.perf_counter()
     user_embedding = await run_in_threadpool(embed_text, user_text)
     embed_sec = round(time.perf_counter() - t0, 2)
@@ -140,9 +147,9 @@ async def _prepare_turn(
     return session, history, user_embedding, context, embed_sec
 
 
-# ─────────────────────────────────────
+# ───────────────────────────────────────
 # 4. 메시지 처리 (블로킹 파이프라인, 음성용)
-# ─────────────────────────────────────
+# ───────────────────────────────────────
 async def process_message(
     db        : Session,
     session_id: int | None,
@@ -178,13 +185,13 @@ async def process_message(
     # ──────────────────────────────────────
     t0 = time.perf_counter()
     use_thinking = _should_think(user_text)
-    force_search = _should_force_search(user_text)
+    forced_tools = _resolve_forced_tools(user_text)
     logger.debug(
-        "thinking=%s force_search=%s | input_len=%d",
-        "on" if use_thinking else "off", force_search, len(user_text),
+        "thinking=%s forced_tools=%s | input_len=%d",
+        "on" if use_thinking else "off", forced_tools, len(user_text),
     )
     # 도구(web_search 등) 사용 가능한 에이전트 루프.
-    answer = await run_in_threadpool(chat_with_tools, history, use_thinking, context, force_search)
+    answer = await run_in_threadpool(chat_with_tools, history, use_thinking, context, forced_tools)
     answer = strip_markdown(answer)
     timings["llm"] = round(time.perf_counter() - t0, 2)
 
@@ -210,9 +217,9 @@ async def process_message(
     return session, answer, timings
 
 
-# ─────────────────────────────────────
+# ─────────────────────────────────────────
 # 5. 메시지 처리 (스트리밍 파이프라인, SSE용)
-# ─────────────────────────────────────
+# ─────────────────────────────────────────
 async def process_message_stream(
     db        : Session,
     session_id: int | None,
@@ -239,14 +246,14 @@ async def process_message_stream(
     # 5-2. 스트리밍 LLM — 토큰을 즉시 중계하며 누적
     # ──────────────────────────────────────
     use_thinking = _should_think(user_text)
-    force_search = _should_force_search(user_text)
+    forced_tools = _resolve_forced_tools(user_text)
     logger.debug(
-        "thinking=%s force_search=%s | input_len=%d | stream",
-        "on" if use_thinking else "off", force_search, len(user_text),
+        "thinking=%s forced_tools=%s | input_len=%d | stream",
+        "on" if use_thinking else "off", forced_tools, len(user_text),
     )
 
     answer_parts: list[str] = []
-    gen = stream_chat_with_tools(history, use_thinking, context, force_search)
+    gen = stream_chat_with_tools(history, use_thinking, context, forced_tools)
     async for event in iterate_in_threadpool(gen):
         if event["type"] == "token":
             answer_parts.append(event["text"])
