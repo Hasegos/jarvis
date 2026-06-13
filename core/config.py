@@ -62,6 +62,7 @@ class Settings(BaseSettings):
 
     # Obsidian wiki
     WIKI_VAULT_PATH: str
+    VAULT_WRITE_PATH: str
 
     # ──────────────────────────
     # 5. 계산된 프로퍼티 (DB URL)
