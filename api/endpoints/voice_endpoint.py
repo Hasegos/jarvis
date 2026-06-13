@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from db.session import get_db
-from services.chat_service import process_message
+from services.chat_service import process_message_stream
 from services.memory.background_service import run_summary_background
 from services.memory.profile_service import _parse_memory_request
 from services.speech.stt_service import transcribe_audio
@@ -34,14 +34,17 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
 )
 async def voice_chat(
-    background_tasks  : BackgroundTasks,
-    session_id: int | None =  Form(None),
-    file      : UploadFile  = File(...),
-    db        : Session     = Depends(get_db),
+    background_tasks: BackgroundTasks,
+    session_id: int | None = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
 ):
     """
     음성 파일을 받아 STT → LLM → TTS 파이프라인을 실행하고
     JSON(텍스트 + base64 오디오)을 반환한다.
+
+    채팅과 동일한 스트리밍 파이프라인(process_message_stream)을
+    내부에서 소비해, 폭주 차단 등 모든 보호가 동일하게 적용된다.
 
     Args:
         session_id: 기존 세션 ID. None이면 새 세션 자동 생성.
@@ -73,15 +76,19 @@ async def voice_chat(
             detail="음성을 인식할 수 없습니다.",
         )
 
-    # ──────────────────────────────────────
-    # 1-2. 공통 파이프라인 (세션+LLM+임베딩+저장)
-    # ──────────────────────────────────────
+    # ───────────────────────────────────────────────
+    # 1-2. 스트리밍 파이프라인 소비 (채팅과 동일한 경로)
+    # ───────────────────────────────────────────────
+    session_id_out = session_id
+    answer = ""
+    timings: dict = {}
+
     try:
-        session, answer, timings = await process_message(
-            db,
-            session_id,
-            user_text,
-        )
+        async for event in process_message_stream(db, session_id, user_text):
+            if event["type"] == "answer_complete":
+                session_id_out = event["session_id"]
+                answer = event["answer"]
+                timings = event["timings"]
     except RuntimeError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -101,7 +108,9 @@ async def voice_chat(
     logger.info(
         "TTS=%.2fs LLM=%.2fs 임베딩=%.2fs DB=%.2fs 전체=%.2fs",
         round(time.perf_counter() - t0, 2),
-        timings['llm'], timings['embedding'], timings['db'],
+        timings.get("llm", 0),
+        timings.get("embedding", 0),
+        timings.get("db", 0),
         round(time.perf_counter() - t_total, 2),
     )
 
@@ -111,7 +120,7 @@ async def voice_chat(
     immediate_profile, forced_section = _parse_memory_request(user_text)
     background_tasks.add_task(
         run_summary_background,
-        session.session_id,
+        session_id_out,
         immediate_profile,
         forced_section,
     )
@@ -119,11 +128,9 @@ async def voice_chat(
     # ──────────────────────────────────────
     # 1-5. JSON 반환
     # ──────────────────────────────────────
-    # HTTP 헤더는 latin-1만 허용 → 한국어 텍스트는 헤더 불가
-    # 오디오를 base64로 인코딩해서 JSON에 포함
     return JSONResponse({
-        "session_id" : session.session_id,
-        "user_text"  : user_text,
-        "answer"     : answer,
-        "audio_b64"  : audio_b64,
+        "session_id": session_id_out,
+        "user_text": user_text,
+        "answer": answer,
+        "audio_b64": audio_b64,
     })

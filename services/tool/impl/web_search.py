@@ -1,16 +1,20 @@
 import json
 
-from ddgs import DDGS
+from tavily import TavilyClient
 
+from core.config import settings
 from core.logger import get_logger
 from core.constants.tool import (
     WEB_SEARCH_MAX_RESULTS,
-    WEB_SEARCH_REGION,
+    WEB_SEARCH_RAW_MAX_CHARS,
     WEB_SEARCH_SNIPPET_MAX_CHARS,
     WEB_SEARCH_TIMEOUT,
+    WEB_SEARCH_DEPTH,
 )
 
 logger = get_logger("tool.web_search")
+
+_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
 
 
 # ─────────────────────
@@ -48,41 +52,60 @@ SPEC = {
 # ─────────────────────
 def run(args: dict) -> str:
     """
-    DuckDuckGo(ddgs)로 웹을 검색해 상위 결과를 JSON 문자열로 반환한다.
+    Tavily(LLM 최적화 검색)로 웹을 검색해 결과를 JSON 문자열로 반환한다.
 
-    실패해도 예외를 올리지 않고 error 필드로 반환해, 모델이
-    "검색에 실패했다"고 자연스럽게 답하게 한다.
+    스니펫뿐 아니라 1위 결과의 페이지 본문(page_content)도 포함해,
+    표·상세 데이터처럼 스니펫에 안 담기는 정보까지 모델에 전달한다.
+    실패해도 예외를 올리지 않고 error 필드로 반환한다.
 
     Args:
         args: {"query": 검색어}
     Returns:
-        {"results": [{title, url, snippet}, ...]} 또는 {"error": ...} JSON 문자열
+        {"answer": str, "results": [{title, url, snippet, page_content?}, ...]}
+        또는 {"error": ...} JSON 문자열
     """
     query = (args.get("query") or "").strip()
     if not query:
         return json.dumps({"error": "검색어가 비어 있습니다"}, ensure_ascii=False)
 
     try:
-        with DDGS(timeout=WEB_SEARCH_TIMEOUT) as ddgs:
-            rows = list(ddgs.text(
-                query,
-                region=WEB_SEARCH_REGION,
-                max_results=WEB_SEARCH_MAX_RESULTS,
-            ))
+        response = _client.search(
+            query,
+            search_depth=WEB_SEARCH_DEPTH,
+            max_results=WEB_SEARCH_MAX_RESULTS,
+            include_answer=True,
+            include_raw_content=True,
+            timeout=WEB_SEARCH_TIMEOUT,
+        )
     except Exception as e:
         logger.warning("web_search 실패: %s", e)
         return json.dumps({"error": f"검색 실패: {e}"}, ensure_ascii=False)
 
-    results = [
-        {
+    # 전체 결과에 붙이면 컨텍스트가 넘치므로 가장 관련도 높은 1건만.
+    results = []
+    for i, r in enumerate(response.get("results", [])):
+        item = {
             "title"  : r.get("title", ""),
-            "url"    : r.get("href", ""),
-            "snippet": (r.get("body", "") or "")[:WEB_SEARCH_SNIPPET_MAX_CHARS],
+            "url"    : r.get("url", ""),
+            "snippet": (r.get("content", "") or "")[:WEB_SEARCH_SNIPPET_MAX_CHARS],
         }
-        for r in rows
-    ]
-    logger.debug("web_search: query=%r results=%d", query, len(results))
-    return json.dumps({"results": results}, ensure_ascii=False)
+        if i == 0:
+            raw = (r.get("raw_content", "") or "").strip()
+            if raw:
+                item["page_content"] = raw[:WEB_SEARCH_RAW_MAX_CHARS]
+        results.append(item)
+    answer = (response.get("answer") or "").strip()
+
+    logger.debug(
+        "web_search: query=%r results=%d answer=%s page_content=%s",
+        query, len(results), bool(answer),
+        bool(results and "page_content" in results[0]),
+    )
+
+    payload = {"results": results}
+    if answer:
+        payload["answer"] = answer
+    return json.dumps(payload, ensure_ascii=False)
 
 
 # ─────────────────────
@@ -91,8 +114,6 @@ def run(args: dict) -> str:
 def announce(args: dict) -> tuple[str, str]:
     """
     이 도구 실행을 (화면 표시용, 음성 안내용) 두 문구로 변환한다.
-
-    도구의 안내는 도구 자신이 정의한다 — 도구 추가 시 이 파일 하나로 끝.
 
     Args:
         args: 모델이 생성한 도구 인자 dict
