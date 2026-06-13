@@ -26,3 +26,4 @@ python-multipart>=0.0.9
 
 # Web Search
 ddgs
+tavily-python
