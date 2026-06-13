@@ -6,8 +6,10 @@ TOOL_MAX_ITERATIONS = 3
 
 WEB_SEARCH_MAX_RESULTS = 3
 WEB_SEARCH_REGION = "kr-kr"
-WEB_SEARCH_SNIPPET_MAX_CHARS = 200
-WEB_SEARCH_TIMEOUT = 10 # ddgs 외부 호출 타임아웃(초)
+WEB_SEARCH_SNIPPET_MAX_CHARS = 300
+WEB_SEARCH_RAW_MAX_CHARS = 2000     # 1위 결과 페이지 본문 상한
+WEB_SEARCH_TIMEOUT = 10 # Tavily 외부 호출 타임아웃
+WEB_SEARCH_DEPTH = "basic" 
 
 
 # ─────────────────────────────────────
