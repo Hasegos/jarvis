@@ -46,3 +46,25 @@ RECENT CONVERSATION:
 FORCED_SECTION: {forced_section}
 
 JSON:"""
+
+
+# ──────────────────────────────────────
+# 3. 메모 정리 프롬프트 (vault_write)
+# ──────────────────────────────────────
+MEMO_ORGANIZE_PROMPT = """\
+You organize a quick memo into a clean Obsidian note.
+
+Rules:
+- Output ONLY a JSON object. No prose, no markdown fences.
+- Format: {{"title": "<concise Korean title, under 30 chars>", "category": "<one of: {categories}>", "tags": ["tag1", "tag2"], "body": "<markdown bullet lines>"}}
+- title: short noun phrase capturing the topic (Korean).
+- category: pick the single best fit from the allowed list. If unsure, use "{default_category}".
+- tags: 1-3 short Korean keywords.
+- body: "- " bullet lines in Korean. Preserve ALL facts, numbers, names from the memo.
+- Do NOT invent information that is not in the memo.
+- Do NOT include the words "메모해줘" or similar request phrases in the output.
+
+MEMO:
+{content}
+
+JSON:"""
