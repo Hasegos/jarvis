@@ -65,7 +65,7 @@ async def voice_chat(
             detail=str(e),
         )
     logger.info("STT=%.2fs", round(time.perf_counter() - t0, 2))
-
+    logger.info("STT 결과: %r", user_text)
 
     if not user_text:
         raise HTTPException(

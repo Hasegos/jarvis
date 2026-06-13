@@ -1,11 +1,16 @@
 import json
 
 from core.logger import get_logger
-from services.tool.registry import TOOL_SPECS, TOOL_HANDLERS, TOOL_ANNOUNCERS
+from services.tool.registry import (
+    TOOL_SPECS,
+    TOOL_HANDLERS,
+    TOOL_ANNOUNCERS,
+    get_forced_tool_specs
+)
 
 logger = get_logger("tool_service")
 
-__all__ = ["TOOL_SPECS", "execute_tool", "announce_tool"]
+__all__ = ["TOOL_SPECS", "execute_tool", "announce_tool", "get_forced_tool_specs"]
 
 
 # ─────────────────────────────────────
