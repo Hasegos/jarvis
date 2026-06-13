@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     WIKI_VAULT_PATH: str
     VAULT_WRITE_PATH: str
 
+    # 웹 검색 (Tavily)
+    TAVILY_API_KEY: str 
+
     # ──────────────────────────
     # 5. 계산된 프로퍼티 (DB URL)
     # ──────────────────────────
