@@ -10,19 +10,93 @@ from core.logger import get_logger
 from services.llm.lm_client import lm_client
 from services.llm.llm_service import _build_messages, build_llm_kwargs
 from services.llm.text_utils import strip_thinking, _StreamThinkFilter
-from services.tool.tool_service import TOOL_SPECS, execute_tool, announce_tool
+from services.tool.tool_service import (
+    TOOL_SPECS,
+    execute_tool,
+    announce_tool,
+    get_forced_tool_specs,
+)
 
 logger = get_logger("agent_service")
 
+# 액션 도구: 같은 의도를 여러 번 실행하면 안 되는 도구 (중복 저장·중복 실행 방지)
+_DEDUP_TOOLS = frozenset({"vault_write"})
+
 
 # ─────────────────────────────────────
-# 1. 도구 에이전트 루프 (블로킹, 음성용)
+# 1. 회차별 도구/선택 결정 (강제 가드)
+# ─────────────────────────────────────
+def _iter_tool_config(
+    forced_tools: list[str],
+    used_tools: set,
+) -> tuple[list[dict], str]:
+    """
+    이번 회차에 LLM에 넘길 (도구 스펙, tool_choice)을 결정한다.
+
+    forced_tools(등장 순서 강제 목록) 중 아직 실행되지 않은 첫 도구를 골라
+    그 도구만 노출 + "required" 로 강제한다.
+
+    Args:
+        forced_tools: 등장 순서 강제 도구 목록 (비어 있을 수 있음)
+        used_tools  : 지금까지 실행된 도구 이름 집합
+    Returns:
+        (tools, tool_choice)
+    """
+    # 강제 목록 중 아직 안 쓴 첫 도구 → 단일 노출 + required
+    for name in forced_tools:
+        if name not in used_tools:
+            specs = get_forced_tool_specs(name)
+            if specs:
+                return specs, "required"
+            break  # 알 수 없는 도구명이면 강제 포기하고 auto로
+
+    # 강제 소진 → auto (중복방지 도구는 이미 썼으면 제외)
+    blocked = used_tools & _DEDUP_TOOLS
+    if blocked:
+        tools = [s for s in TOOL_SPECS if s["function"]["name"] not in blocked]
+    else:
+        tools = TOOL_SPECS
+    return tools, "auto"
+
+
+# ─────────────────────────────────────
+# 2. 중복 도구 호출 제거 (병렬 과잉 차단)
+# ─────────────────────────────────────
+def _dedup_tool_calls(calls: list, name_of) -> list:
+    """
+    한 회차에 들어온 도구 호출 중, 중복 방지 대상 도구(_DEDUP_TOOLS)는
+    이름당 첫 호출만 남긴다.
+
+    모델이 "메모해줘" 한 번에 vault_write 를 여러 번(내용을 쪼개) 부르는
+    과잉 호출을 막는다.
+
+    Args:
+        calls  : 이번 회차의 도구 호출 목록 (블로킹: tool_call 객체 / 스트림: acc dict)
+        name_of: 호출에서 도구 이름을 꺼내는 함수
+    Returns:
+        중복 제거된 호출 목록 (순서 유지)
+    """
+    seen = set()
+    out  = []
+    for c in calls:
+        name = name_of(c)
+        if name in _DEDUP_TOOLS:
+            if name in seen:
+                logger.debug("중복 도구 호출 무시: %s", name)
+                continue
+            seen.add(name)
+        out.append(c)
+    return out
+
+
+# ─────────────────────────────────────
+# 3. 도구 에이전트 루프 (블로킹, 음성용)
 # ─────────────────────────────────────
 def chat_with_tools(
     history: list[dict],
     use_thinking: bool = False,
     context: str | None = None,
-    force_search: bool = False,
+    forced_tools: list[str] | None = None,
 ) -> str:
     """
     도구(web_search 등)를 사용할 수 있는 블로킹 LLM 호출.
@@ -35,31 +109,28 @@ def chat_with_tools(
         history     : user/assistant 대화 히스토리
         use_thinking: thinking 활성화 여부
         context     : 프로필/위키/RAG 참고 블록 (선택)
-        force_search: True 면 web_search 강제 지시를 주입
+        forced_tools: 등장 순서 강제 도구 목록 (선택). 키워드 트리거로 결정됨.
     Returns:
         thinking 블록이 제거된 최종 응답 텍스트
     Raises:
         RuntimeError: 연결 실패, 타임아웃, API 오류
     """
     answer_max = ANSWER_MAX_TOKENS_THINKING if use_thinking else ANSWER_MAX_TOKENS_SIMPLE
-    messages = _build_messages(history, context, use_thinking, force_search)
+    forced = list(forced_tools or [])
+    messages = _build_messages(history, context, use_thinking, bool(forced))
+    used_tools: set = set()
 
     for iteration in range(1, TOOL_MAX_ITERATIONS + 1):
         # ──────────────────────────────────────
-        # 1-1. LLM 호출 (도구 스펙 포함)
+        # 3-1. LLM 호출 (도구 스펙 포함)
         # ──────────────────────────────────────
-        iter_thinking = use_thinking
-        iter_tool_choice = (
-            "required"
-            if (force_search and iteration == 1)
-            else "auto"
-        )
+        iter_tools, iter_tool_choice = _iter_tool_config(forced, used_tools)
         try:
             response = lm_client.chat.completions.create(
                 messages=messages,
-                tools=TOOL_SPECS,
+                tools=iter_tools,
                 tool_choice=iter_tool_choice,
-                **build_llm_kwargs(iter_thinking, answer_max),
+                **build_llm_kwargs(use_thinking, answer_max),
             )
         except APIConnectionError:
             raise RuntimeError(
@@ -78,8 +149,9 @@ def chat_with_tools(
             return strip_thinking(msg.content or "")
 
         # ──────────────────────────────────────
-        # 1-2. 도구 실행 → 결과를 대화에 추가 → 재호출
+        # 3-2. 도구 실행 → 결과를 대화에 추가 → 재호출
         # ──────────────────────────────────────
+        tool_calls = _dedup_tool_calls(list(msg.tool_calls), lambda tc: tc.function.name)
         messages.append({
             "role": "assistant",
             "content": msg.content or "",
@@ -89,11 +161,12 @@ def chat_with_tools(
                     "type": "function",
                     "function": {"name": tc.function.name, "arguments": tc.function.arguments},
                 }
-                for tc in msg.tool_calls
+                for tc in tool_calls
             ],
         })
-        for tc in msg.tool_calls:
+        for tc in tool_calls:
             result = execute_tool(tc.function.name, tc.function.arguments)
+            used_tools.add(tc.function.name)
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
@@ -101,7 +174,7 @@ def chat_with_tools(
             })
 
     # ──────────────────────────────────────
-    # 1-3. 반복 초과 — 도구 없이 답변 강제
+    # 3-3. 반복 초과 — 도구 없이 답변 강제
     # ──────────────────────────────────────
     try:
         response = lm_client.chat.completions.create(
@@ -115,13 +188,13 @@ def chat_with_tools(
 
 
 # ─────────────────────────────────────
-# 2. 도구 에이전트 루프 (스트리밍, SSE용)
+# 4. 도구 에이전트 루프 (스트리밍, SSE용)
 # ─────────────────────────────────────
 def stream_chat_with_tools(
     history: list[dict],
     use_thinking: bool = False,
     context: str | None = None,
-    force_search: bool = False,
+    forced_tools: list[str] | None = None,
 ) -> Iterator[dict]:
     """
     도구 사용이 가능한 스트리밍 LLM 호출 (SSE용).
@@ -135,33 +208,30 @@ def stream_chat_with_tools(
         history     : user/assistant 대화 히스토리
         use_thinking: thinking 활성화 여부
         context     : 프로필/위키/RAG 참고 블록 (선택)
-        force_search: True 면 web_search 강제 지시를 주입
+        forced_tools: 등장 순서 강제 도구 목록 (선택). 키워드 트리거로 결정됨.
     Yields:
         이벤트 dict
     Raises:
         RuntimeError: 연결 실패, 타임아웃, 스트리밍 오류
     """
     answer_max = ANSWER_MAX_TOKENS_THINKING if use_thinking else ANSWER_MAX_TOKENS_SIMPLE
-    messages = _build_messages(history, context, use_thinking, force_search)
+    forced = list(forced_tools or [])
+    messages = _build_messages(history, context, use_thinking, bool(forced))
+    used_tools: set = set()
 
     for iteration in range(1, TOOL_MAX_ITERATIONS + 1):
         # ──────────────────────────────────────
-        # 2-1. 스트리밍 호출 (도구 스펙 포함)
+        # 4-1. 스트리밍 호출 (도구 스펙 포함)
         # ──────────────────────────────────────
-        iter_thinking = use_thinking
-        iter_tool_choice = (
-            "required"
-            if (force_search and iteration == 1)
-            else "auto"
-        )
+        iter_tools, iter_tool_choice = _iter_tool_config(forced, used_tools)
         t_llm = time.perf_counter()
         try:
             stream = lm_client.chat.completions.create(
                 messages=messages,
-                tools=TOOL_SPECS,
+                tools=iter_tools,
                 tool_choice=iter_tool_choice,
                 stream=True,
-                **build_llm_kwargs(iter_thinking, answer_max),
+                **build_llm_kwargs(use_thinking, answer_max),
             )
         except APIConnectionError:
             raise RuntimeError(
@@ -175,7 +245,7 @@ def stream_chat_with_tools(
             raise RuntimeError(f"LLM 호출 오류: {e}")
 
         # ──────────────────────────────────────
-        # 2-2. 토큰/도구호출 분리 수신
+        # 4-2. 토큰/도구호출 분리 수신
         # ──────────────────────────────────────
         think_filter  = _StreamThinkFilter()
         pending_ws    = ""
@@ -238,8 +308,12 @@ def stream_chat_with_tools(
             return
 
         # ──────────────────────────────────────
-        # 2-3. 도구 실행 → 결과 추가 → 재호출
+        # 4-3. 도구 실행 → 결과 추가 → 재호출
         # ──────────────────────────────────────
+        accs = _dedup_tool_calls(
+            [tool_acc[i] for i in sorted(tool_acc)],
+            lambda a: a["name"],
+        )
         messages.append({
             "role": "assistant",
             "content": strip_thinking("".join(content_parts)),
@@ -249,14 +323,14 @@ def stream_chat_with_tools(
                     "type": "function",
                     "function": {"name": acc["name"], "arguments": acc["arguments"]},
                 }
-                for acc in (tool_acc[i] for i in sorted(tool_acc))
+                for acc in accs
             ],
         })
-        for i in sorted(tool_acc):
-            acc = tool_acc[i]
+        for acc in accs:
             status_text, speech_text = announce_tool(acc["name"], acc["arguments"])
             yield {"type": "status", "text": status_text, "speech": speech_text}
             result = execute_tool(acc["name"], acc["arguments"])
+            used_tools.add(acc["name"])
             messages.append({
                 "role": "tool",
                 "tool_call_id": acc["id"],
@@ -264,7 +338,7 @@ def stream_chat_with_tools(
             })
 
     # ──────────────────────────────────────
-    # 2-4. 반복 초과 — 도구 없이 답변 강제 (스트리밍)
+    # 4-4. 반복 초과 — 도구 없이 답변 강제 (스트리밍)
     # ──────────────────────────────────────
     try:
         stream = lm_client.chat.completions.create(
