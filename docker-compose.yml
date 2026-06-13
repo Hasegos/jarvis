@@ -17,6 +17,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - "D:/02_Personal/01_WORK/my-brain:/vault:ro"
+      - "D:/02_Personal/01_WORK/jarvis:/vault-write:rw"
     restart: unless-stopped
 
   # ─────────────────────────────────────
