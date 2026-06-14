@@ -7,6 +7,7 @@ from services.tool.registry import (
     TOOL_ANNOUNCERS,
     get_forced_tool_specs
 )
+from services.tool.result import err
 
 logger = get_logger("tool_service")
 
@@ -33,17 +34,17 @@ def execute_tool(name: str, arguments_json: str) -> str:
     try:
         args = json.loads(arguments_json or "{}")
     except json.JSONDecodeError:
-        return json.dumps({"error": "잘못된 인자 형식"}, ensure_ascii=False)
+        return err("잘못된 인자 형식")
 
     handler = TOOL_HANDLERS.get(name)
     if handler is None:
-        return json.dumps({"error": f"알 수 없는 도구: {name}"}, ensure_ascii=False)
+        return err(f"알 수 없는 도구: {name}")
 
     try:
         return handler(args)
     except Exception as e:
         logger.warning("도구 실행 오류: %s — %s", name, e)
-        return json.dumps({"error": f"도구 실행 오류: {e}"}, ensure_ascii=False)
+        return err("도구 실행 중 오류가 발생했습니다.")
 
 
 # ─────────────────────────────────────
