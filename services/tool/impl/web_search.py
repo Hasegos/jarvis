@@ -11,6 +11,7 @@ from core.constants.tool import (
     WEB_SEARCH_TIMEOUT,
     WEB_SEARCH_DEPTH,
 )
+from services.tool.result import ok, err
 
 logger = get_logger("tool.web_search")
 
@@ -79,7 +80,7 @@ def run(args: dict) -> str:
         )
     except Exception as e:
         logger.warning("web_search 실패: %s", e)
-        return json.dumps({"error": f"검색 실패: {e}"}, ensure_ascii=False)
+        return err("검색 중 오류가 발생했습니다.")
 
     # 전체 결과에 붙이면 컨텍스트가 넘치므로 가장 관련도 높은 1건만.
     results = []
@@ -105,7 +106,7 @@ def run(args: dict) -> str:
     payload = {"results": results}
     if answer:
         payload["answer"] = answer
-    return json.dumps(payload, ensure_ascii=False)
+    return ok(**payload)
 
 
 # ─────────────────────
