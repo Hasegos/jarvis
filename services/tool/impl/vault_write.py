@@ -197,7 +197,7 @@ def run(args: dict) -> str:
 
     # 검색 실패로 껍데기 메모는 저장하지 않는다.
     if _is_empty_memo(content):
-        logger.debug("빈 메모 차단(정보 없음): %r", content[:50])
+        logger.debug("빈 메모 차단(정보 없음): %d자", len(content))
         return json.dumps(
             {"skipped": True, "reason": "검색 결과에 저장할 정보가 없어 메모하지 않았습니다."},
             ensure_ascii=False,
