@@ -75,14 +75,9 @@ app.include_router(api_router, prefix="/api/v1")
 # ─────────────────────────────────────
 @app.get("/", include_in_schema=False)
 async def index(request: Request):
-    """자비스 웹 UI 서빙."""
-    return templates.TemplateResponse(request, "index.html")
+    """자비스 홀로그램 메인 UI 서빙."""
+    return templates.TemplateResponse(request, "hologram.html")
 
-
-@app.get("/chat", include_in_schema=False)
-async def chat_page(request: Request):
-    """자비스 채팅 페이지 서빙."""
-    return templates.TemplateResponse(request, "chat.html")
 
 # ─────────────────────────────────────
 # 7. 헬스체크
