@@ -67,8 +67,11 @@ async def voice_chat(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
-    logger.info("STT=%.2fs", round(time.perf_counter() - t0, 2))
-    logger.info("STT 결과: %r", user_text)
+    logger.info(
+        "STT 완료: %.2fs초, 결과='%.100s'",
+        round(time.perf_counter() - t0, 2),
+        user_text,
+    )
 
     if not user_text:
         raise HTTPException(
@@ -104,9 +107,9 @@ async def voice_chat(
         tts_bytes = await synthesize(answer)
         audio_b64 = base64.b64encode(tts_bytes).decode("utf-8")
     except RuntimeError as e:
-        logger.warning("TTS 오류 (무시): %s", e)
+        logger.debug("TTS 생략: %s", e)
     logger.info(
-        "TTS=%.2fs LLM=%.2fs 임베딩=%.2fs DB=%.2fs 전체=%.2fs",
+        "처리 시간: TTS=%.2fs LLM=%.2fs 임베딩=%.2fs DB=%.2fs 전체=%.2fs",
         round(time.perf_counter() - t0, 2),
         timings.get("llm", 0),
         timings.get("embedding", 0),
