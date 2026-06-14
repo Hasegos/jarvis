@@ -1,7 +1,10 @@
 from openai import APIConnectionError, APITimeoutError
 
 from core.config import settings
+from core.logger import get_logger
 from services.llm.lm_client import lm_client
+
+logger = get_logger("embedding")
 
 
 # ─────────────────────
@@ -33,4 +36,5 @@ def embed_text(text: str) -> list[float]:
             f"임베딩 타임아웃 ({settings.LM_STUDIO_TIMEOUT}초 초과)."
         )
     except Exception as e:
-        raise RuntimeError(f"임베딩 오류: {e}")
+        logger.error("임베딩 오류: %s", e)
+        raise RuntimeError("임베딩 처리 중 오류가 발생했습니다.")
