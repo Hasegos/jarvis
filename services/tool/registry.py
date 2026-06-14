@@ -1,10 +1,12 @@
 from services.tool.impl import web_search
 from services.tool.impl import vault_write
+from services.tool.impl import file_ops
 
 # 등록된 도구 모듈 목록
 _TOOLS = [
     web_search,
-    vault_write
+    vault_write,
+    file_ops
 ]
 
 # LLM에 전달하는 전체 도구 스펙
@@ -21,6 +23,32 @@ TOOL_ANNOUNCERS = {
     t.SPEC["function"]["name"]: t.announce
     for t in _TOOLS
     if hasattr(t, "announce")
+}
+
+# 이름 → 도구 자체의 위험도 매핑
+#   "safe"       : 읽기 전용 도구 (예: web_search)
+#   "write"      : 앱 소유 저장소에 쓰기 (예: vault_write)
+#   "destructive": 외부 파일시스템/OS 조작 (예: file_ops)
+# needs_confirm(args)를 정의한 도구는 RISK보다 그 함수가 우선한다
+# RISK 미선언 도구는 안전을 위해 "destructive"로 간주한다
+TOOL_RISK = {
+    t.SPEC["function"]["name"]: getattr(t, "RISK", "destructive")
+    for t in _TOOLS
+}
+
+# 이름 → 미리보기 함수 매핑
+TOOL_PREVIEWS = {
+    t.SPEC["function"]["name"]: t.preview
+    for t in _TOOLS
+    if hasattr(t, "preview")
+}
+
+# 이름 → confirm 판정 함수 매핑
+# 정의된 도구는 RISK보다 이 함수가 우선한다
+TOOL_CONFIRM_CHECKS = {
+    t.SPEC["function"]["name"]: t.needs_confirm
+    for t in _TOOLS
+    if hasattr(t, "needs_confirm")
 }
 
 
