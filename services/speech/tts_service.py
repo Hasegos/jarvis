@@ -1,6 +1,9 @@
 import asyncio, os, re ,tempfile, edge_tts
 
 from core.config import settings
+from core.logger import get_logger
+
+logger = get_logger("speech.tts")
 
 
 # 마크다운 정제 패턴
@@ -84,6 +87,7 @@ async def synthesize(text: str) -> bytes:
             f"TTS 타임아웃 ({settings.TTS_TIMEOUT}초 초과)."
         )
     except Exception as e:
+        logger.warning("TTS 합성 오류: %s", e)
         raise RuntimeError(f"TTS 합성 오류: {e}")
     finally:
         # ──────────────────────────────────────
