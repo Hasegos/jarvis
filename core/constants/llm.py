@@ -17,4 +17,4 @@ THINKING_KEYWORDS = frozenset({
 # 2. thinking 여부에따른 토큰값
 # ─────────────────────────────────────
 ANSWER_MAX_TOKENS_SIMPLE   = 2048
-ANSWER_MAX_TOKENS_THINKING = 8192
+ANSWER_MAX_TOKENS_THINKING = 32768
