@@ -25,6 +25,7 @@ def embed_text(text: str) -> list[float]:
         response = lm_client.embeddings.create(
             model=settings.LM_STUDIO_EMBEDDING_MODEL,
             input=text,
+            timeout=settings.LM_STUDIO_TIMEOUT
         )
         return response.data[0].embedding
     except APIConnectionError:
