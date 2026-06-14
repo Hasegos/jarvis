@@ -15,6 +15,7 @@ from core.constants.tool import (
 from core.logger import get_logger
 from services.llm.lm_client import lm_client
 from services.llm.text_utils import strip_thinking
+from services.tool.result import ok, err
 
 logger = get_logger("tool.vault_write")
 
@@ -193,24 +194,18 @@ def run(args: dict) -> str:
     """
     content = (args.get("content") or "").strip()
     if not content:
-        return json.dumps({"error": "메모할 내용이 비어 있습니다"}, ensure_ascii=False)
+        return err("메모할 내용이 비어 있습니다")
 
     # 검색 실패로 껍데기 메모는 저장하지 않는다.
     if _is_empty_memo(content):
         logger.debug("빈 메모 차단(정보 없음): %d자", len(content))
-        return json.dumps(
-            {"skipped": True, "reason": "검색 결과에 저장할 정보가 없어 메모하지 않았습니다."},
-            ensure_ascii=False,
-        )
+        return ok(skipped=True, reason="검색 결과에 저장할 정보가 없어 메모하지 않았습니다.")
 
     base_dir = Path(settings.VAULT_WRITE_PATH)
 
     if not base_dir.is_dir():
         logger.warning("vault-write 경로 없음: %s", base_dir)
-        return json.dumps(
-            {"error": "메모 저장 경로가 없습니다. 마운트를 확인하세요."},
-            ensure_ascii=False,
-        )
+        return err("메모 저장 경로가 없습니다. 마운트를 확인하세요.")
 
     now = datetime.now(_KST)
 
@@ -284,13 +279,10 @@ def run(args: dict) -> str:
 
     except Exception as e:
         logger.warning("메모 저장 실패: %s", e)
-        return json.dumps({"error": f"메모 저장 실패: {e}"}, ensure_ascii=False)
+        return err("메모 저장 중 오류가 발생했습니다.")
 
     logger.debug("메모 저장: %s/%s ← %r (정리=%s)", category, path.name, title, bool(organized))
-    return json.dumps(
-        {"saved": True, "category": category, "file": path.name, "title": title},
-        ensure_ascii=False,
-    )
+    return ok(saved=True, category=category, file=path.name, title=title)
 
 
 # ─────────────────────
