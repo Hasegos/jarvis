@@ -24,7 +24,7 @@ async def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
         RuntimeError: STT 서버 연결 실패, 오류
     """
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=settings.STT_TIMEOUT) as client:
             response = await client.post(
                 f"{settings.STT_SERVER_URL}/transcribe",
                 files={"file": (filename, audio_bytes)},
