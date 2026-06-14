@@ -1,11 +1,15 @@
-import time
+import re, time
 
 from sqlalchemy.orm import Session
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from core.config import settings
 from core.constants.llm import THINKING_KEYWORDS, THINKING_LENGTH_THRESHOLD
-from core.constants.tool import FORCED_TOOL_KEYWORDS
+from core.constants.tool import (
+    FORCED_TOOL_KEYWORDS,
+    CONFIRM_APPROVE_KEYWORDS,
+    CONFIRM_DENY_KEYWORDS,
+)
 from core.logger import get_logger
 from crud.chat_crud import (
     create_message,
@@ -13,7 +17,12 @@ from crud.chat_crud import (
     get_or_create_session,
 )
 from models.session_model import Session as ChatSession
-from services.agent.agent_service import stream_chat_with_tools
+from services.agent.agent_service import stream_chat_with_tools, resume_tool_loop
+from services.agent.pending_store import (
+    store_pending,
+    pop_pending,
+    find_by_session,
+)
 from services.embedding_service import embed_text
 from services.knowledge.wiki_service import search_wiki
 from services.llm.text_utils import strip_markdown
@@ -118,7 +127,31 @@ async def _prepare_turn(
 
 
 # ─────────────────────────────────────────
-# 4. 메시지 처리 (단일 스트리밍 파이프라인)
+# 4. confirm 자동 해소 판정 (음성/텍스트 공통)
+# ─────────────────────────────────────────
+def _confirm_verdict(user_text: str) -> bool | None:
+    """
+    보류 중인 confirm을 입력의 긍정·부정으로 해소할지 판정한다.
+
+    Args:
+        user_text: 사용자 입력 텍스트
+    Returns:
+        True(승인) / False(거부) / None(판정 불가 → 정상 처리)
+    """
+    tokens = {
+        re.sub(r"[^0-9a-z가-힣]", "", tok)
+        for tok in user_text.strip().lower().split()
+    }
+    tokens.discard("")
+    if tokens & CONFIRM_DENY_KEYWORDS:
+        return False
+    if tokens & CONFIRM_APPROVE_KEYWORDS:
+        return True
+    return None
+
+
+# ─────────────────────────────────────────
+# 5. 메시지 처리 (단일 스트리밍 파이프라인)
 # ─────────────────────────────────────────
 async def process_message_stream(
     db: Session,
@@ -129,26 +162,39 @@ async def process_message_stream(
     단일 스트리밍 파이프라인 — 채팅·음성 모두 이 함수 하나를 거친다.
 
     턴 준비 → LLM 스트리밍(도구 포함) → 임베딩 → DB 저장까지 한 곳에서 처리.
-    채팅은 토큰 이벤트를 SSE로 즉시 전달하고,
-    음성은 answer_complete 이벤트에서 답변을 꺼내 TTS에 넘긴다.
+    보류 중인 confirm이 있고 입력이 긍정/부정이면 새 턴 대신 재개한다.
 
     Yields:
-        {"type": "token",  "text": str}                                — 답변 조각
-        {"type": "status", "text": str, "speech": str}                 — 도구 실행 상태
-        {"type": "answer_complete", "session_id", "answer", "timings"} — 저장 완료
+        {"type": "token",  "text": str}                         — 답변 조각
+        {"type": "status", "text": str, "speech": str}          — 도구 실행 상태
+        {"type": "confirm_required", ...}                       — destructive 확인 요청
+        {"type": "answer_complete", session_id, answer, user_text, timings} — 저장 완료
     """
-    timings: dict = {}
+    # ────────────────────────────────────────────────
+    # 5-1. confirm 보류 자동 해소 (음성/텍스트 공통)
+    # ────────────────────────────────────────────────
+    if session_id is not None:
+        found = find_by_session(session_id)
+        if found:
+            action_id, pending = found
+            verdict = _confirm_verdict(user_text)
+            if verdict is not None:
+                pop_pending(action_id)
+                logger.debug("confirm 자동 해소: approved=%s", verdict)
+                async for ev in _resume_stream(db, pending, verdict):
+                    yield ev
+                return
 
     # ──────────────────────────────────────
-    # 4-1. 공통 턴 준비
+    # 5-2. 공통 턴 준비
     # ──────────────────────────────────────
     session, history, user_embedding, context, embed_sec = await _prepare_turn(
         db, session_id, user_text
     )
-    timings["embedding"] = embed_sec
+    timings: dict = {"embedding": embed_sec}
 
     # ──────────────────────────────────────
-    # 4-2. LLM 스트리밍 (도구 포함)
+    # 5-3. LLM 스트리밍 (도구 포함) → 공통 소비
     # ──────────────────────────────────────
     use_thinking = _should_think(user_text)
     forced_tools = _resolve_forced_tools(user_text)
@@ -159,38 +205,162 @@ async def process_message_stream(
         len(user_text),
     )
 
+    gen = stream_chat_with_tools(history, use_thinking, context, forced_tools)
+    async for ev in _consume_agent_stream(
+        db, gen, session.session_id, user_text, user_embedding, timings
+    ):
+        yield ev
+
+
+# ─────────────────────────────────────────
+# 6. agent 스트림 소비 (최초/재개 공통)
+# ─────────────────────────────────────────
+async def _consume_agent_stream(
+    db: Session,
+    gen,
+    session_id: int,
+    user_text: str,
+    user_embedding: list[float],
+    timings: dict,
+):
+    """
+    agent 제너레이터를 소비한다 — 토큰은 흘리고, confirm은 보류 저장 후 종료,
+    완료되면 _finalize로 저장한다. 최초 턴과 confirm 재개 턴이 공유한다.
+
+    Args:
+        db            : SQLAlchemy 세션
+        gen           : stream_chat_with_tools / resume_tool_loop 제너레이터
+        session_id    : 세션 PK
+        user_text     : 사용자 입력
+        user_embedding: user 임베딩 (재계산 방지)
+        timings       : 누적 타이밍 dict (embedding 키가 있을 수 있음)
+    Yields:
+        token / status / confirm_required / answer_complete
+    """
     t0 = time.perf_counter()
     answer_parts: list[str] = []
-    gen = stream_chat_with_tools(history, use_thinking, context, forced_tools)
+
     async for event in iterate_in_threadpool(gen):
+        if event["type"] == "confirm_required":
+            action_id = store_pending(
+                session_id, user_text, user_embedding, event["_resume"]
+            )
+            yield {
+                "type": "confirm_required",
+                "action_id": action_id,
+                "session_id": session_id,
+                "tool": event["tool"],
+                "args": event["args"],
+                "preview": event["preview"],
+            }
+            return
         if event["type"] == "token":
             answer_parts.append(event["text"])
         yield event
 
-    answer = strip_markdown("".join(answer_parts).strip())
     timings["llm"] = round(time.perf_counter() - t0, 2)
+    yield await _finalize(
+        db, session_id, user_text, user_embedding, answer_parts, timings
+    )
 
-    # ──────────────────────────────────────
-    # 4-3. assistant 임베딩 + DB 저장
-    # ──────────────────────────────────────
+
+# ─────────────────────────────────────────
+# 7. 턴 마무리 (임베딩 + 저장 + answer_complete)
+# ─────────────────────────────────────────
+async def _finalize(
+    db: Session,
+    session_id: int,
+    user_text: str,
+    user_embedding: list[float],
+    answer_parts: list[str],
+    timings: dict,
+) -> dict:
+    """
+    답변을 정리해 임베딩·저장하고 answer_complete 이벤트를 만든다.
+
+    최초 턴과 confirm 재개 턴이 공유한다. user 메시지는 여기서 한 번에
+    저장된다 (보류 중에는 저장하지 않으므로 찌꺼기가 없다).
+
+    Args:
+        db            : SQLAlchemy 세션
+        session_id    : 세션 PK
+        user_text     : 사용자 입력
+        user_embedding: user 임베딩 (턴 준비 때 계산해 둔 값)
+        answer_parts  : 스트리밍으로 모은 답변 조각
+        timings       : 누적 타이밍 dict
+    Returns:
+        answer_complete 이벤트 dict
+    """
+    answer = strip_markdown("".join(answer_parts).strip())
+
     t0 = time.perf_counter()
     assistant_embedding = await run_in_threadpool(embed_text, answer)
     timings["embedding"] = round(
-        timings["embedding"] + (time.perf_counter() - t0), 2
+        timings.get("embedding", 0) + (time.perf_counter() - t0), 2
     )
 
     t0 = time.perf_counter()
     await run_in_threadpool(
-        create_message, db, session.session_id, "user", user_text, user_embedding
+        create_message, db, session_id, "user", user_text, user_embedding
     )
     await run_in_threadpool(
-        create_message, db, session.session_id, "assistant", answer, assistant_embedding
+        create_message, db, session_id, "assistant", answer, assistant_embedding
     )
     timings["db"] = round(time.perf_counter() - t0, 2)
 
-    yield {
+    return {
         "type": "answer_complete",
-        "session_id": session.session_id,
+        "session_id": session_id,
         "answer": answer,
+        "user_text": user_text,
         "timings": timings,
     }
+
+
+# ─────────────────────────────────────────
+# 8. confirm 재개 스트림
+# ─────────────────────────────────────────
+async def _resume_stream(db: Session, pending: dict, approved: bool):
+    """
+    보류된 도구를 실행/취소하고 LLM 루프를 이어서 답변을 스트리밍한다.
+
+    Args:
+        db      : SQLAlchemy 세션
+        pending : 보류 dict (session_id, user_text, user_embedding, resume)
+        approved: 승인 여부
+    Yields:
+        token / status / confirm_required / answer_complete
+    """
+    gen = resume_tool_loop(pending["resume"], approved)
+    async for ev in _consume_agent_stream(
+        db,
+        gen,
+        pending["session_id"],
+        pending["user_text"],
+        pending["user_embedding"],
+        {},
+    ):
+        yield ev
+
+
+# ─────────────────────────────────────────
+# 9. confirm 엔드포인트용 처리
+# ─────────────────────────────────────────
+async def process_confirm_stream(db: Session, action_id: str, approved: bool):
+    """
+    /chat/confirm 진입점 — action_id로 보류를 꺼내 재개 스트림을 위임한다.
+
+    Args:
+        db       : SQLAlchemy 세션
+        action_id: 보류 식별자
+        approved : 승인 여부
+    Yields:
+        _resume_stream과 동일한 이벤트
+    Raises:
+        RuntimeError: 보류가 없거나 만료된 경우
+    """
+    pending = pop_pending(action_id)
+    if pending is None:
+        raise RuntimeError("만료되었거나 존재하지 않는 확인 요청입니다.")
+    async for ev in _resume_stream(db, pending, approved):
+        yield ev
