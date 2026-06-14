@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S</title>
+    <link rel="stylesheet" href="/static/css/hologram.css">
+</head>
+<body>
+
+    <!-- 파티클 구체 캔버스 -->
+    <canvas id="orbCanvas"></canvas>
+
+    <!-- 부팅 오버레이 -->
+    <div id="boot" class="boot">
+    <div id="bootTitle" class="boot__title"></div>
+    <div id="bootHint" class="boot__hint">화면을 클릭하여 시스템을 가동하세요</div>
+    <div id="bootStatus" class="boot__status"></div>
+    </div>
+
+    <!-- 구체 상태 라벨 -->
+    <div id="orbState" class="orb-state"></div>
+
+    <!-- 녹음 표시 -->
+    <div id="recIndicator" class="rec-indicator" hidden>
+    <span class="rec-indicator__dot"></span> 녹음 중…
+    </div>
+
+    <!-- 접힘 시 플로팅 아이콘 -->
+    <button id="hudFab" class="hud-fab" hidden title="채팅 열기 (J.A.R.V.I.S)">
+    ◆<span id="hudFabDot" class="hud-fab__dot" hidden></span>
+    </button>
+
+    <!-- 채팅 HUD 패널 -->
+    <section id="hudPanel" class="hud-panel hud-panel--collapsed" hidden>
+    <div class="hud-panel__scan"></div>
+
+    <header class="hud-panel__header">
+        <span class="hud-panel__title">J.A.R.V.I.S</span>
+        <div class="hud-panel__actions">
+        <button id="btnSessions" class="hud-btn" title="대화 목록">≡</button>
+        <button id="btnNew" class="hud-btn" title="새 대화">＋</button>
+        <button id="btnExpand" class="hud-btn" title="확장/축소">⤢</button>
+        <button id="btnHide" class="hud-btn" title="숨기기">—</button>
+        </div>
+    </header>
+
+    <!-- 대화 뷰 -->
+    <div id="hudMessages" class="hud-panel__messages"></div>
+
+    <!-- 세션 목록 뷰 -->
+    <div id="hudSessions" class="hud-panel__sessions" hidden>
+        <button id="btnBack" class="hud-back">← 현재 대화로 돌아가기</button>
+        <div class="hud-section-label">대화 목록</div>
+        <div id="sessionList" class="hud-list"></div>
+        <div class="hud-section-label">숨긴 대화</div>
+        <div id="hiddenList" class="hud-list"></div>
+    </div>
+
+    <!-- 입력창 -->
+    <footer class="hud-panel__input">
+        <textarea id="textInput" rows="1" autocomplete="off"
+                placeholder="메시지 입력 (Enter 전송 · F9 음성)"></textarea>
+        <button id="btnSend" class="hud-btn hud-btn--send">▸</button>
+    </footer>
+    </section>
+
+    <!-- Three.js r128 + 후처리(Bloom) + OrbitControls (로컬) -->
+    <script src="/static/lib/three/three.min.js"></script>
+    <script src="/static/lib/three/CopyShader.js"></script>
+    <script src="/static/lib/three/LuminosityHighPassShader.js"></script>
+    <script src="/static/lib/three/EffectComposer.js"></script>
+    <script src="/static/lib/three/RenderPass.js"></script>
+    <script src="/static/lib/three/ShaderPass.js"></script>
+    <script src="/static/lib/three/MaskPass.js"></script>
+    <script src="/static/lib/three/UnrealBloomPass.js"></script>
+    <script src="/static/lib/three/OrbitControls.js"></script>
+
+    <!-- 공통 유틸 -->
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/hologram/scene.js"></script>
+    <script src="/static/js/hologram/boot.js"></script>
+    <script src="/static/js/hologram/chat.js"></script>
+    <script src="/static/js/hologram/voice.js"></script>
+    <script src="/static/js/hologram/session.js"></script>
+    <script src="/static/js/hologram/app.js"></script>
+</body>
+</html>
