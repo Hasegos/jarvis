@@ -28,7 +28,7 @@ def execute_tool(name: str, arguments_json: str) -> str:
     Returns:
         도구 실행 결과 JSON 문자열
     """
-    logger.debug("도구 실행: %s(%s)", name, arguments_json)
+    logger.info("도구 실행: %s(%.120s)", name, arguments_json or "")
 
     try:
         args = json.loads(arguments_json or "{}")
