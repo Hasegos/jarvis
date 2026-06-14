@@ -1,7 +1,10 @@
 from core.config import settings
 from core.constants.prompts import SYSTEM_PROMPT
+from core.logger import get_logger
 from services.llm.lm_client import lm_client
 from services.llm.text_utils import strip_thinking
+
+logger = get_logger("llm_service")
 
 
 # ─────────────────────────────────────
@@ -111,4 +114,5 @@ def generate_summary(history: list[dict]) -> str:
         word = strip_thinking(content).strip().split()[0] if content.strip() else ""
         return word
     except Exception as e:
+        logger.warning("요약 생성 오류: %s", e)
         raise RuntimeError(f"요약 생성 오류: {e}")
