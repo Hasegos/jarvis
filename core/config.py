@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     STT_LANGUAGE: str
     STT_SAMPLE_RATE: int          # Whisper 기대 입력 (Hz)
     STT_MIN_SPEECH_SECONDS: float # 이 미만이면 STT 스킵
+    STT_TIMEOUT: float            # STT 서버 호출 타임아웃
 
     # ───────────────────────────
     # 3. TTS (Edge TTS)
