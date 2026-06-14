@@ -14,7 +14,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from core.logger import get_logger
+from core.constants.tool import CONFIRM_VOICE_SUFFIX
 from db.session import get_db
+from schemas.chat_schema import TtsRequest
 from services.chat_service import process_message_stream
 from services.memory.background_service import run_summary_background
 from services.memory.profile_service import _parse_memory_request
@@ -85,10 +87,20 @@ async def voice_chat(
     session_id_out = session_id
     answer = ""
     timings: dict = {}
+    pending_confirm = False
+    tools_used: list[str] = []
 
     try:
         async for event in process_message_stream(db, session_id, user_text):
-            if event["type"] == "answer_complete":
+            if event["type"] == "status":
+                tool = event.get("tool")
+                if tool and tool not in tools_used:
+                    tools_used.append(tool)
+            elif event["type"] == "confirm_required":
+                session_id_out = event["session_id"]
+                answer = f"{event['preview']} {CONFIRM_VOICE_SUFFIX}"
+                pending_confirm = True
+            elif event["type"] == "answer_complete":
                 session_id_out = event["session_id"]
                 answer = event["answer"]
                 timings = event["timings"]
@@ -117,16 +129,17 @@ async def voice_chat(
         round(time.perf_counter() - t_total, 2),
     )
 
-    # ──────────────────────────────────────
-    # 1-4. 백그라운드 요약 갱신
-    # ──────────────────────────────────────
-    immediate_profile, forced_section = _parse_memory_request(user_text)
-    background_tasks.add_task(
-        run_summary_background,
-        session_id_out,
-        immediate_profile,
-        forced_section,
-    )
+    # ──────────────────────────────────────────────────
+    # 1-4. 백그라운드 요약 갱신 (confirm 보류 중엔 미실행)
+    # ──────────────────────────────────────────────────
+    if not pending_confirm:
+        immediate_profile, forced_section = _parse_memory_request(user_text)
+        background_tasks.add_task(
+            run_summary_background,
+            session_id_out,
+            immediate_profile,
+            forced_section,
+        )
 
     # ──────────────────────────────────────
     # 1-5. JSON 반환
@@ -136,4 +149,32 @@ async def voice_chat(
         "user_text": user_text,
         "answer": answer,
         "audio_b64": audio_b64,
+        "tools_used": tools_used,
     })
+
+
+# ─────────────────────────────────
+# 2. 임의 텍스트 TTS (부팅 인사 등)
+# ─────────────────────────────────
+@router.post(
+    "/tts",
+    status_code=status.HTTP_200_OK,
+)
+async def tts(req: TtsRequest):
+    """
+    임의 텍스트를 Edge TTS로 합성해 base64 오디오를 반환한다.
+
+    부팅 인사처럼 대화 턴과 무관한 음성에 사용한다. 합성 실패는
+    비치명적 — audio_b64=null로 반환한다.
+
+    Args:
+        req: 요청 바디 (text)
+    Returns:
+        JSONResponse ({"audio_b64": str | None})
+    """
+    audio_b64 = None
+    try:
+        audio_b64 = base64.b64encode(await synthesize(req.text)).decode("utf-8")
+    except RuntimeError as e:
+        logger.debug("TTS 생략: %s", e)
+    return JSONResponse({"audio_b64": audio_b64})
