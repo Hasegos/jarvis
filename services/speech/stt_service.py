@@ -1,6 +1,9 @@
 import httpx
 
 from core.config import settings
+from core.logger import get_logger
+
+logger = get_logger("speech.stt")
 
 
 # ─────────────────────────────────────
@@ -37,4 +40,5 @@ async def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
     except httpx.TimeoutException:
         raise RuntimeError("STT 서버 응답 타임아웃.")
     except Exception as e:
+        logger.error("STT 오류: %s", e)
         raise RuntimeError(f"STT 오류: {e}")
