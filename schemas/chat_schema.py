@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
@@ -18,38 +17,29 @@ class ChatRequest(BaseModel):
     message    : str
 
 
-# ─────────────────────
-# 2. 응답 스키마
-# ─────────────────────
-class ChatResponse(BaseModel):
+# ───────────────────────
+# 2. confirm 요청 스키마
+# ───────────────────────
+class ConfirmRequest(BaseModel):
     """
-    채팅 메시지 응답 스키마.
+    destructive 도구 실행 확인 요청 스키마.
 
     Args:
-        session_id: 현재 대화 세션 ID.
-        answer    : 어시스턴트 답변 텍스트.
+        action_id: 보류된 작업 식별자 (confirm_required 이벤트로 받은 값).
+        approved : True면 실행, False면 취소.
     """
-    session_id : int
-    answer     : str
-    audio_b64  : Optional[str] = None
+    action_id : str
+    approved  : bool
 
 
 # ─────────────────────
-# 3. 세션 스키마
+# 3. TTS 요청 스키마
 # ─────────────────────
-class SessionOut(BaseModel):
+class TtsRequest(BaseModel):
     """
-    세션 조회 응답 스키마.
+    임의 텍스트 음성 합성 요청 스키마.
 
     Args:
-        session_id    : 세션 PK.
-        started_at    : 세션 시작 시각.
-        last_active_at: 마지막 활동 시각.
-        summary       : compact 요약 (없으면 None).
+        text: 합성할 텍스트.
     """
-    session_id      : int
-    started_at      : datetime
-    last_active_at  : Optional[datetime] = None
-    summary         : Optional[str] = None
-
-    model_config = {"from_attributes" : True}
+    text : str

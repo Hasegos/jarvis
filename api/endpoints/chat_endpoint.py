@@ -13,13 +13,13 @@ from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from db.session import get_db
-from schemas.chat_schema import ChatRequest
+from schemas.chat_schema import ChatRequest, ConfirmRequest
 from models.session_model import Session as ChatSession
 from crud.chat_crud import (
     get_all_messages_by_session,
     delete_session
 )
-from services.chat_service import process_message_stream
+from services.chat_service import process_message_stream, process_confirm_stream
 from services.memory.background_service import run_summary_background
 from services.memory.profile_service import _parse_memory_request
 from services.speech.tts_service import synthesize
@@ -29,44 +29,42 @@ logger = get_logger("chat_endpoint")
 
 router = APIRouter()
 
+
+# ─────────────────────
+# 1. SSE 직렬화
+# ─────────────────────
 def _sse(payload: dict) -> str:
     """이벤트 dict 를 SSE 한 줄(data: {...}\\n\\n)로 직렬화한다."""
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-# ─────────────────────────────────────
-# 1. 채팅 메시지 전송 (SSE 스트리밍)
-# ─────────────────────────────────────
-@router.post(
-    "/stream",
-    status_code=status.HTTP_200_OK,
-)
-async def send_message_stream(
-    req: ChatRequest,
-    background_tasks: BackgroundTasks,
-    db : Session = Depends(get_db),
-):
-    """
-    사용자 메시지를 받아 답변을 SSE 로 스트리밍한다.
 
-    이벤트(JSON): status(도구 상태) / token(답변 조각) /
-    done(session_id, 최종 answer, audio_b64) / error(message).
-    TTS 는 답변 완성 후 done 이벤트에 통짜로 싣는다.
+# ─────────────────────
+# 2. SSE 스트림 래퍼
+# ─────────────────────
+def _stream_sse(source, background_tasks: BackgroundTasks):
+    """
+    파이프라인 이벤트 소스를 SSE 응답으로 감싼다 (최초 전송·confirm 재개 공용).
+
+    answer_complete 에서 TTS 합성 + 백그라운드 요약 등록 후 done 을 송출하고,
+    그 외 이벤트(status/token/confirm_required)는 그대로 흘려보낸다.
 
     Args:
-        req: 요청 바디 (session_id, message)
-        db : SQLAlchemy 세션
+        source          : process_message_stream / process_confirm_stream 제너레이터
+        background_tasks : 요약 백그라운드 등록용
     Returns:
-        StreamingResponse (text/event-stream)
+        SSE 문자열을 yield 하는 async 제너레이터
     """
     async def event_stream():
         t_total = time.perf_counter()
         try:
-            async for ev in process_message_stream(db, req.session_id, req.message):
-                # ──────────────────────────────────────────────
-                # 답변 완성 — TTS + 백그라운드 등록 후 done 송출
-                # ──────────────────────────────────────────────
+            async for ev in source:
+                # ─────────────────────────────────────────────────
+                # 2-1. 답변 완성 — TTS + 백그라운드 등록 후 done 송출
+                # ─────────────────────────────────────────────────
                 if ev["type"] == "answer_complete":
-                    immediate_profile, forced_section = _parse_memory_request(req.message)
+                    immediate_profile, forced_section = _parse_memory_request(
+                        ev.get("user_text", "")
+                    )
                     background_tasks.add_task(
                         run_summary_background,
                         ev["session_id"],
@@ -80,10 +78,10 @@ async def send_message_stream(
                         tts_bytes = await synthesize(ev["answer"])
                         audio_b64 = base64.b64encode(tts_bytes).decode("utf-8")
                     except RuntimeError as e:
-                        logger.warning("TTS 오류 (무시): %s", e)
+                        logger.debug("TTS 생략: %s", e)
 
                     logger.info(
-                        "stream TTS=%.2fs 전체=%.2fs",
+                        "TTS 완료: %.2fs초 (전체 %.2fs초)",
                         round(time.perf_counter() - t0, 2),
                         round(time.perf_counter() - t_total, 2),
                     )
@@ -98,8 +96,67 @@ async def send_message_stream(
         except RuntimeError as e:
             yield _sse({"type": "error", "message": str(e)})
 
+    return event_stream()
+
+
+# ─────────────────────────────────────
+# 3. 채팅 메시지 전송 (SSE 스트리밍)
+# ─────────────────────────────────────
+@router.post(
+    "/stream",
+    status_code=status.HTTP_200_OK,
+)
+async def send_message_stream(
+    req: ChatRequest,
+    background_tasks: BackgroundTasks,
+    db : Session = Depends(get_db),
+):
+    """
+    사용자 메시지를 받아 답변을 SSE 로 스트리밍한다.
+
+    Args:
+        req: 요청 바디 (session_id, message)
+        db : SQLAlchemy 세션
+    Returns:
+        StreamingResponse (text/event-stream)
+    """
     return StreamingResponse(
-        event_stream(),
+        _stream_sse(
+            process_message_stream(db, req.session_id, req.message),
+            background_tasks,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+        background=background_tasks,
+    )
+
+
+# ───────────────────────────────────────────
+# 4. destructive 도구 실행 확인 (SSE 스트리밍)
+# ───────────────────────────────────────────
+@router.post(
+    "/confirm",
+    status_code=status.HTTP_200_OK,
+)
+async def confirm_action(
+    req: ConfirmRequest,
+    background_tasks: BackgroundTasks,
+    db : Session = Depends(get_db),
+):
+    """
+    보류된 destructive 작업을 승인/취소하고, 이어지는 답변을 SSE 로 스트리밍한다.
+
+    Args:
+        req: 요청 바디 (action_id, approved)
+        db : SQLAlchemy 세션
+    Returns:
+        StreamingResponse (text/event-stream)
+    """
+    return StreamingResponse(
+        _stream_sse(
+            process_confirm_stream(db, req.action_id, req.approved),
+            background_tasks,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
         background=background_tasks,
@@ -107,7 +164,7 @@ async def send_message_stream(
 
 
 # ─────────────────────────────────────
-# 2. 세션 목록 조회
+# 5. 세션 목록 조회
 # ─────────────────────────────────────
 @router.get(
     "/sessions",
@@ -122,7 +179,6 @@ def get_sessions(db: Session = Depends(get_db)):
     Returns:
         세션 목록 (session_id, started_at, last_active_at, summary)
     """
-
     sessions = (
         db.query(ChatSession)
         .order_by(func.coalesce(ChatSession.last_active_at, ChatSession.started_at).desc())
@@ -140,7 +196,7 @@ def get_sessions(db: Session = Depends(get_db)):
 
 
 # ─────────────────────────────────────
-# 3. 세션 메시지 조회
+# 6. 세션 메시지 조회
 # ─────────────────────────────────────
 @router.get(
     "/sessions/{session_id}/messages",
@@ -152,8 +208,6 @@ def get_session_messages(
 ):
     """
     세션의 전체 메시지를 시간순으로 반환한다.
-
-    그래프 뷰에서 세션 선택 시 대화 내용 복원에 사용한다.
 
     Args:
         session_id: 조회할 세션 PK
@@ -171,8 +225,9 @@ def get_session_messages(
         for m in messages
     ]
 
+
 # ─────────────────────────────────────
-# 4. 세션 삭제 (DB 영구 삭제)
+# 7. 세션 삭제 (DB 영구 삭제)
 # ─────────────────────────────────────
 @router.delete(
     "/sessions/{session_id}",

@@ -5,13 +5,23 @@ from services.tool.registry import (
     TOOL_SPECS,
     TOOL_HANDLERS,
     TOOL_ANNOUNCERS,
+    TOOL_RISK,
+    TOOL_PREVIEWS,
+    TOOL_CONFIRM_CHECKS,
     get_forced_tool_specs
 )
 from services.tool.result import err
 
 logger = get_logger("tool_service")
 
-__all__ = ["TOOL_SPECS", "execute_tool", "announce_tool", "get_forced_tool_specs"]
+__all__ = [
+    "TOOL_SPECS",
+    "execute_tool",
+    "announce_tool",
+    "requires_confirm",
+    "preview_tool",
+    "get_forced_tool_specs",
+]
 
 
 # ─────────────────────────────────────
@@ -72,3 +82,52 @@ def announce_tool(name: str, arguments_json: str) -> tuple[str, str]:
     if announcer is None:
         return (f"{name} 실행 중...", "잠시만요, 확인해 보겠습니다.")
     return announcer(args)
+
+
+# ─────────────────────────────────────
+# 3. confirm 필요 여부 판정
+# ─────────────────────────────────────
+def requires_confirm(name: str, args: dict | None = None) -> bool:
+    """
+    도구가 실행 전 사용자 확인(confirm)이 필요한지 판정한다.
+
+    도구가 needs_confirm(args)를 정의하면 그것으로 action별 판정한다
+    (예: file_ops는 read만 면제). 없으면 위험도 기반 판정:
+    "destructive"는 확인 필요, "safe"/"write"는 즉시 실행, 미등록은 fail-safe.
+
+    Args:
+        name: 도구 이름
+        args: 도구 인자 dict (action별 판정에 사용)
+    Returns:
+        확인이 필요하면 True
+    """
+    check = TOOL_CONFIRM_CHECKS.get(name)
+    if check is not None:
+        return check(args or {})
+    return TOOL_RISK.get(name, "destructive") == "destructive"
+
+
+# ─────────────────────────────────────
+# 4. 실행 미리보기
+# ─────────────────────────────────────
+def preview_tool(name: str, arguments_json: str) -> str:
+    """
+    confirm 전, "이렇게 실행됩니다"를 부작용 없이 보여줄 문구를 만든다.
+
+    도구가 preview(args)를 정의하면 그것을 쓰고, 없으면 일반 폴백.
+
+    Args:
+        name          : 도구 이름
+        arguments_json: LLM이 생성한 인자 JSON 문자열
+    Returns:
+        미리보기 문구
+    """
+    try:
+        args = json.loads(arguments_json or "{}")
+    except json.JSONDecodeError:
+        args = {}
+
+    previewer = TOOL_PREVIEWS.get(name)
+    if previewer is not None:
+        return previewer(args)
+    return f"{name} 실행: {json.dumps(args, ensure_ascii=False)}"

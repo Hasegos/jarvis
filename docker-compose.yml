@@ -18,6 +18,8 @@ services:
     volumes:
       - "D:/02_Personal/01_WORK/my-brain:/vault:ro"
       - "D:/02_Personal/01_WORK/jarvis:/vault-write:rw"
+      # file_ops 영역 (FILE_OPS_{별칭}={등급}:{호스트경로})
+      - "D:/04_Jarvis:/data/fileops/jarvis:rw"
     restart: unless-stopped
 
   # ─────────────────────────────────────

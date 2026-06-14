@@ -1,5 +1,3 @@
-import json
-
 from tavily import TavilyClient
 
 from core.config import settings
@@ -67,7 +65,7 @@ def run(args: dict) -> str:
     """
     query = (args.get("query") or "").strip()
     if not query:
-        return json.dumps({"error": "검색어가 비어 있습니다"}, ensure_ascii=False)
+        return err("검색어가 비어 있습니다")
 
     try:
         response = _client.search(
