@@ -110,6 +110,8 @@ def generate_summary(history: list[dict]) -> str:
             temperature=0.1,
             max_tokens=20,
         )
+        if not response.choices:
+            raise RuntimeError("요약 응답이 비어 있습니다.")
         content = response.choices[0].message.content or ""
         word = strip_thinking(content).strip().split()[0] if content.strip() else ""
         return word
