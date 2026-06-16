@@ -73,7 +73,15 @@ def _resolve_forced_tools(user_text: str) -> list[str]:
         if positions:
             hits.append((min(positions), tool_name))
     hits.sort(key=lambda x: x[0])
-    return [tool_name for _pos, tool_name in hits]
+    result = [tool_name for _pos, tool_name in hits]
+
+    if "os_control" in result and "탐색기" in lowered:
+        result = [t for t in result if t != "file_ops"]
+
+    if "navigation" in result:
+        result = [t for t in result if t != "os_control"]
+
+    return result
 
 
 # ──────────────────────────────────────────
