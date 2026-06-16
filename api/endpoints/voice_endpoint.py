@@ -65,14 +65,15 @@ async def voice_chat(
     try:
         user_text = await transcribe_audio(audio_bytes, file.filename or "audio.webm")
     except RuntimeError as e:
+        logger.warning("STT 처리 오류: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
+            detail="음성 처리 중 오류가 발생했습니다.",
         )
     logger.info(
-        "STT 완료: %.2fs초, 결과='%.100s'",
+        "STT 완료: %.2fs초, 길이=%d자",
         round(time.perf_counter() - t0, 2),
-        user_text,
+        len(user_text),
     )
 
     if not user_text:
@@ -105,9 +106,10 @@ async def voice_chat(
                 answer = event["answer"]
                 timings = event["timings"]
     except RuntimeError as e:
+        logger.warning("음성 파이프라인 오류: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(e),
+            detail="음성 처리 중 오류가 발생했습니다.",
         )
 
     # ──────────────────────────────────────
