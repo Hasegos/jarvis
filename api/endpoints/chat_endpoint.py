@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from db.session import get_db
-from schemas.chat_schema import ChatRequest, ConfirmRequest
+from schemas.chat_schema import ChatRequest, ConfirmRequest, LocationRequest
 from models.session_model import Session as ChatSession
 from crud.chat_crud import (
     get_all_messages_by_session,
     delete_session
 )
 from services.chat_service import process_message_stream, process_confirm_stream
+from services.agent.location_store import update_location
 from services.memory.background_service import run_summary_background
 from services.memory.profile_service import _parse_memory_request
 from services.speech.tts_service import synthesize
@@ -94,7 +95,8 @@ def _stream_sse(source, background_tasks: BackgroundTasks):
                 else:
                     yield _sse(ev)
         except RuntimeError as e:
-            yield _sse({"type": "error", "message": str(e)})
+            logger.warning("스트림 처리 오류: %s", e)
+            yield _sse({"type": "error", "message": "처리 중 오류가 발생했습니다."})
 
     return event_stream()
 
@@ -253,3 +255,23 @@ def delete_session_endpoint(
             detail="세션을 찾을 수 없습니다.",
         )
     return {"deleted": True, "session_id": session_id}
+
+
+# ─────────────────────────────────────
+# 8. 현재 위치 갱신 (브라우저 GPS)
+# ─────────────────────────────────────
+@router.post(
+    "/location",
+    status_code=status.HTTP_200_OK,
+)
+def update_location_endpoint(req: LocationRequest):
+    """
+    브라우저가 보낸 GPS 좌표로 현재 위치를 갱신한다.
+
+    Args:
+        req: 요청 바디 (lat, lng)
+    Returns:
+        {"ok": True}
+    """
+    update_location(req.lat, req.lng)
+    return {"ok": True}
