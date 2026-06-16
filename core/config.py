@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # 웹 검색 (Tavily)
     TAVILY_API_KEY: str 
 
+    # 네이버 지도
+    NAVER_MAP_CLIENT_ID: str
+    NAVER_MAP_CLIENT_SECRET: str
+
     # ──────────────────────────
     # 5. 계산된 프로퍼티 (DB URL)
     # ──────────────────────────
