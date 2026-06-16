@@ -43,3 +43,18 @@ class TtsRequest(BaseModel):
         text: 합성할 텍스트.
     """
     text : str
+
+
+# ─────────────────────
+# 4. 위치 요청 스키마
+# ─────────────────────
+class LocationRequest(BaseModel):
+    """
+    브라우저 GPS 현재 위치 갱신 요청 스키마.
+
+    Args:
+        lat: 위도.
+        lng: 경도.
+    """
+    lat : float
+    lng : float
