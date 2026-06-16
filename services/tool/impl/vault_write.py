@@ -15,9 +15,12 @@ from core.constants.tool import (
 from core.logger import get_logger
 from services.llm.lm_client import lm_client
 from services.llm.text_utils import strip_thinking
-from services.tool.result import ok, err
+from services.tool.tool_result import ok, err
 
 logger = get_logger("tool.vault_write")
+
+# 위험도
+RISK = "write"
 
 _KST = ZoneInfo("Asia/Seoul")
 
