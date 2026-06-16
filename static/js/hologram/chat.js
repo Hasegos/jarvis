@@ -206,6 +206,10 @@ window.JARVIS = window.JARVIS || {};
   J.sendText = async function () {
     const message = J.dom.textInput.value.trim();
     if (!message || J.state.busy) return;
+
+    // GPS 갱신
+    await J.updateLocation();
+
     J.dom.textInput.value = '';
     J.autoResizeInput();
     J.addMessage('user', message);
