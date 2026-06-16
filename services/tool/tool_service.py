@@ -1,7 +1,7 @@
 import json
 
 from core.logger import get_logger
-from services.tool.registry import (
+from services.tool.tool_registry import (
     TOOL_SPECS,
     TOOL_HANDLERS,
     TOOL_ANNOUNCERS,
@@ -10,7 +10,7 @@ from services.tool.registry import (
     TOOL_CONFIRM_CHECKS,
     get_forced_tool_specs
 )
-from services.tool.result import err
+from services.tool.tool_result import err
 
 logger = get_logger("tool_service")
 

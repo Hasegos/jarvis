@@ -8,7 +8,7 @@ from core.constants.tool import (
     FILE_OPS_LIST_MAX,
 )
 from core.logger import get_logger
-from services.tool.result import ok, err
+from services.tool.tool_result import ok, err
 
 logger = get_logger("tool.file_ops")
 

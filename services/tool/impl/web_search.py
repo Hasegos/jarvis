@@ -1,17 +1,23 @@
+import urllib.parse, httpx
+
 from tavily import TavilyClient
 
 from core.config import settings
 from core.logger import get_logger
 from core.constants.tool import (
+    OS_CONTROL_TIMEOUT,
     WEB_SEARCH_MAX_RESULTS,
     WEB_SEARCH_RAW_MAX_CHARS,
     WEB_SEARCH_SNIPPET_MAX_CHARS,
     WEB_SEARCH_TIMEOUT,
     WEB_SEARCH_DEPTH,
 )
-from services.tool.result import ok, err
+from services.tool.tool_result import ok, err
 
 logger = get_logger("tool.web_search")
+
+# 위험도 
+RISK = "safe"
 
 _client = TavilyClient(api_key=settings.TAVILY_API_KEY)
 
@@ -100,6 +106,14 @@ def run(args: dict) -> str:
         query, len(results), bool(answer),
         bool(results and "page_content" in results[0]),
     )
+
+    # 검색 결과를 호스트 브라우저에도 띄운다
+    try:
+        search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
+        with httpx.Client(timeout=OS_CONTROL_TIMEOUT) as client:
+            client.post(f"{settings.STT_SERVER_URL}/browse", json={"url": search_url})
+    except Exception as e:
+        logger.debug("web_search 브라우저 열기 실패(무시): %s", e)
 
     payload = {"results": results}
     if answer:
