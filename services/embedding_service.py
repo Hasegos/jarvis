@@ -27,6 +27,8 @@ def embed_text(text: str) -> list[float]:
             input=text,
             timeout=settings.LM_STUDIO_TIMEOUT
         )
+        if not response.data:
+            raise RuntimeError("임베딩 응답이 비어 있습니다.")
         return response.data[0].embedding
     except APIConnectionError:
         raise RuntimeError(
