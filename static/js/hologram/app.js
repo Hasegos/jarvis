@@ -46,8 +46,30 @@ window.JARVIS = window.JARVIS || {};
    */
   J.three = { booting: false, bootProgress: 0 };
 
+  
   /**
-   * 3. DOM 캐시
+   * 3. 현재 위치(GPS) 서버 갱신
+   *
+   * 브라우저 GPS 좌표를 받아 navigation 출발지용으로 서버에 전송한다.
+   * 메시지/음성 전송을 막지 않도록 실패·타임아웃은 조용히 무시한다.
+   *
+   * @returns {Promise<void>}
+   */
+  J.updateLocation = async function () {
+    try {
+      const pos = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 })
+      );
+      await fetch(API_ENDPOINTS.chatLocation, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      });
+    } catch (e) { /* GPS 실패해도 진행 */ }
+  };
+
+  /**
+   * 4. DOM 캐시
    *
    * DOMContentLoaded 후 initDom()에서 한 번 수집한다.
    */
@@ -76,7 +98,7 @@ window.JARVIS = window.JARVIS || {};
   }
 
   /**
-   * 4. 이벤트 바인딩
+   * 5. 이벤트 바인딩
    *
    * 채팅 입력(Enter/Shift+Enter), 패널 버튼, 부팅 클릭, F9 음성 단축키를 등록한다.
    */
@@ -107,7 +129,7 @@ window.JARVIS = window.JARVIS || {};
   }
 
   /**
-   * 5. 초기화
+   * 6. 초기화
    *
    * DOM 수집 → Three.js 씬 구성 → 이벤트 바인딩.
    */

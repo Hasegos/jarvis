@@ -15,6 +15,9 @@ window.JARVIS = window.JARVIS || {};
    * @returns {Promise<void>} 마이크 접근 성공 시 resolve
    */
   function startRecording() {
+    // GPS 갱신
+    J.updateLocation();
+
     return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
       J.state.recChunks = [];
       const rec = new MediaRecorder(stream);
