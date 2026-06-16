@@ -1,5 +1,4 @@
 from db.base_class import Base
-from models.fact_model import Fact
 from models.session_model import Session
 from models.message_model import Message
 from models.memory_profile_model import MemoryProfile
