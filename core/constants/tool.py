@@ -10,6 +10,13 @@ WEB_SEARCH_RAW_MAX_CHARS = 2000     # 1위 결과 페이지 본문 상한
 WEB_SEARCH_TIMEOUT = 10 # Tavily 외부 호출 타임아웃
 WEB_SEARCH_DEPTH = "basic" 
 
+# os_control 호스트 서버 호출 타임아웃
+OS_CONTROL_TIMEOUT = 10
+
+# navigation (네이버 지도 API)
+NAVIGATION_TIMEOUT = 10
+NAVIGATION_DEFAULT_ORIGIN = "울산"
+
 
 # ─────────────────────────────────────
 # 2. 메모 (vault_write)
