@@ -18,7 +18,7 @@ from services.tool.tool_service import (
     preview_tool,
     get_forced_tool_specs,
 )
-from services.tool.result import ok
+from services.tool.tool_result import ok
 
 logger = get_logger("agent_service")
 
