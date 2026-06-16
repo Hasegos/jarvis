@@ -7,8 +7,9 @@
  * 1. API 엔드포인트 상수
  */
 const API_ENDPOINTS = Object.freeze({
-  chatStream : '/api/v1/chat/stream',
-  chatConfirm: '/api/v1/chat/confirm',
+  chatStream  : '/api/v1/chat/stream',
+  chatConfirm : '/api/v1/chat/confirm',
+  chatLocation: '/api/v1/chat/location',
   voice   : '/api/v1/voice',
   tts     : '/api/v1/voice/tts',
   sessions: '/api/v1/chat/sessions',
