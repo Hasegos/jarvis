@@ -186,6 +186,9 @@ def _run_tool_loop(
         # 5-1. LLM 스트리밍 호출
         # ──────────────────────────────────────
         iter_tools, iter_tool_choice = _iter_tool_config(forced, used_tools)
+        logger.debug(
+            "LLM 호출: tool_choice=%s, tools=%d개", iter_tool_choice, len(iter_tools)
+        )
         t_llm = time.perf_counter()
 
         try:
@@ -216,7 +219,7 @@ def _run_tool_loop(
         content_parts: list[str] = []
         tool_acc: dict[int, dict] = {}
         try:
-            yield from _consume_llm_stream(stream, content_parts, tool_acc)
+            yield from _consume_llm_stream(stream, content_parts, tool_acc, forced)
         except RuntimeError:
             raise
         except Exception as e:
@@ -335,6 +338,7 @@ def _consume_llm_stream(
     stream,
     content_parts: list[str],
     tool_acc: dict[int, dict],
+    forced_tools: list[str],
 ) -> Iterator[dict]:
     """
     LLM 스트림을 읽어 텍스트 토큰을 yield하고, content_parts·tool_acc를
@@ -345,6 +349,7 @@ def _consume_llm_stream(
         stream       : lm_client 스트리밍 응답
         content_parts: 텍스트 누적 리스트 (in-place 갱신)
         tool_acc     : 도구 호출 누적 dict (in-place 갱신)
+        forced_tools : 강제 도구 목록 (빈 응답 경고 로그용)
     Yields:
         {"type": "token", "text": str}
     """
@@ -410,3 +415,9 @@ def _consume_llm_stream(
             yield {"type": "token", "text": pending_ws + tail}
         else:
             yield {"type": "token", "text": tail}
+
+    # 도구 호출도 텍스트도 없는 빈 응답
+    if not tool_acc and not "".join(content_parts).strip():
+        logger.warning(
+            "LLM 빈 응답: tool_calls=0, text=empty, forced_tools=%s", forced_tools
+        )
