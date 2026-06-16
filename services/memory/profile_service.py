@@ -147,6 +147,8 @@ def extract_profile_updates(
             temperature=0.1,
             max_tokens=settings.LLM_MAX_TOKENS,
         )
+        if not response.choices:
+            return []
         raw = response.choices[0].message.content or ""
         raw = strip_thinking(raw).strip()
 
