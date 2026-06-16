@@ -11,7 +11,7 @@ class MemoryProfile(Base):
 
     profile_id : Mapped[int]                = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     section    : Mapped[str]                = mapped_column(String(50), nullable=False, unique=True)
-    content    : Mapped[str]                = mapped_column(Text, nullable=False, server_default="")
+    content    : Mapped[str]                = mapped_column(Text, nullable=True, server_default="")
     updated_at : Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True, server_default=func.now(), onupdate=func.now()
     )

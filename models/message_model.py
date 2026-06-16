@@ -34,7 +34,3 @@ class Message(Base):
 
     # relationships
     session : Mapped["Session"] = relationship(back_populates="messages")
-    facts   : Mapped[list["Fact"]] = relationship(
-        back_populates="message",
-        cascade="all, delete-orphan",
-    )
