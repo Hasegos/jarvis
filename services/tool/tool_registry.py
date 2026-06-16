@@ -1,12 +1,16 @@
 from services.tool.impl import web_search
 from services.tool.impl import vault_write
 from services.tool.impl import file_ops
+from services.tool.impl import os_control
+from services.tool.impl import navigation
 
 # 등록된 도구 모듈 목록
 _TOOLS = [
     web_search,
     vault_write,
-    file_ops
+    file_ops,
+    os_control,
+    navigation
 ]
 
 # LLM에 전달하는 전체 도구 스펙
