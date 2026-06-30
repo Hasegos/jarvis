@@ -12,6 +12,7 @@ _PENDING: dict[str, dict] = {}
 
 # confirm 응답이 이 시간(초) 동안 안 오면 보류를 자동 폐기한다.
 _PENDING_TTL_SEC = 300
+_MAX_PENDING = 500
 
 
 # ─────────────────────────────────────
@@ -58,6 +59,10 @@ def store_pending(
         새 action_id (hex)
     """
     _evict_expired()
+
+    if len(_PENDING) >= _MAX_PENDING:
+        oldest = min(_PENDING, key=lambda a: _PENDING[a]["created_at"])
+        _PENDING.pop(oldest, None)
 
     for aid in [a for a, p in _PENDING.items() if p["session_id"] == session_id]:
         _PENDING.pop(aid, None)
