@@ -1,4 +1,4 @@
-import urllib.parse, httpx
+import re, urllib.parse, httpx
 
 from tavily import TavilyClient
 
@@ -16,14 +16,31 @@ from services.tool.tool_result import ok, err
 
 logger = get_logger("tool.web_search")
 
-# 위험도 
+# 위험도
 RISK = "safe"
 
+# 프롬프트 인젝션 패턴
+_INJECTION_RE = re.compile(
+    r"ignore\s+(previous|prior|above|all\s+instruction)|"
+    r"new\s+instruction|"
+    r"<\|?\s*(system|user|assistant)\s*\|?>|"
+    r"(?<!\w)system\s*:",
+    re.IGNORECASE,
+)
+
 _client = TavilyClient(api_key=settings.TAVILY_API_KEY)
+_browse_client = httpx.Client(timeout=OS_CONTROL_TIMEOUT)
+
+# ─────────────────────────
+# 1. 프롬프트 인젝션 제거
+# ─────────────────────────
+def _strip_injection(text: str) -> str:
+    """프롬프트 인젝션 패턴이 포함된 줄을 제거한다."""
+    return "\n".join(l for l in text.splitlines() if not _INJECTION_RE.search(l))
 
 
 # ─────────────────────
-# 1. 도구 스펙
+# 2. 도구 스펙
 # ─────────────────────
 SPEC = {
     "type": "function",
@@ -53,7 +70,7 @@ SPEC = {
 
 
 # ─────────────────────
-# 2. 도구 실행
+# 3. 도구 실행
 # ─────────────────────
 def run(args: dict) -> str:
     """
@@ -97,7 +114,7 @@ def run(args: dict) -> str:
         if i == 0:
             raw = (r.get("raw_content", "") or "").strip()
             if raw:
-                item["page_content"] = raw[:WEB_SEARCH_RAW_MAX_CHARS]
+                item["page_content"] = _strip_injection(raw)[:WEB_SEARCH_RAW_MAX_CHARS]
         results.append(item)
     answer = (response.get("answer") or "").strip()
 
@@ -110,8 +127,11 @@ def run(args: dict) -> str:
     # 검색 결과를 호스트 브라우저에도 띄운다
     try:
         search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
-        with httpx.Client(timeout=OS_CONTROL_TIMEOUT) as client:
-            client.post(f"{settings.STT_SERVER_URL}/browse", json={"url": search_url})
+        _browse_client.post(
+            f"{settings.STT_SERVER_URL}/browse",
+            json={"url": search_url},
+            headers={"X-Internal-Token": settings.INTERNAL_API_TOKEN},
+        )
     except Exception as e:
         logger.debug("web_search 브라우저 열기 실패(무시): %s", e)
 
@@ -122,7 +142,7 @@ def run(args: dict) -> str:
 
 
 # ─────────────────────
-# 3. 도구 안내 문구
+# 4. 도구 안내 문구
 # ─────────────────────
 def announce(args: dict) -> tuple[str, str]:
     """
