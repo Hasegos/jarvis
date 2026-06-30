@@ -9,8 +9,11 @@ from sqlalchemy import text
 
 from api.router import api_router
 from core.config import settings
+from core.logger import get_logger
 from db.session import engine
 from db.base import Base
+
+logger = get_logger("main")
 
 # ─────────────────────────────────────
 # 1. 앱 생명주기 (lifespan)
@@ -26,14 +29,21 @@ async def lifespan(app: FastAPI):
         # ──────────────────────────────────────
         # 1-1. pgvector extension 활성화
         # ──────────────────────────────────────
-        with engine.connect() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            conn.commit()
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                conn.commit()
 
-        # ──────────────────────────────────────
-        # 1-2. 테이블 자동 생성
-        # ──────────────────────────────────────
-        Base.metadata.create_all(bind=engine)
+            # ──────────────────────────────────────
+            # 1-2. 테이블 자동 생성
+            # ──────────────────────────────────────
+            Base.metadata.create_all(bind=engine)
+        except Exception as e:
+            logger.error("DB 초기화 실패: %s", type(e).__name__)
+            raise RuntimeError(
+                "데이터베이스 초기화에 실패했습니다. "
+                "DB 연결 정보를 확인하세요."
+            ) from None
 
     yield
 
