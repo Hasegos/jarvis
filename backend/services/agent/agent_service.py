@@ -105,6 +105,7 @@ def stream_chat_with_tools(
     use_thinking: bool = False,
     context: str | None = None,
     forced_tools: list[str] | None = None,
+    use_raw_history : bool = False,
 ) -> Iterator[dict]:
     """
     도구 호출을 처리하는 단일 스트리밍 파이프라인
@@ -119,7 +120,10 @@ def stream_chat_with_tools(
         RuntimeError: 연결 실패, 타임아웃, 스트리밍 오류
     """
     forced = list(forced_tools or [])
-    messages = _build_messages(history, context, use_thinking, bool(forced))
+    if use_raw_history:
+        messages = history
+    else:
+        messages = _build_messages(history, context, use_thinking, bool(forced))
     yield from _run_tool_loop(messages, set(), use_thinking, forced)
 
 
