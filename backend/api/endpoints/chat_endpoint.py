@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from db.session import get_db
-from schemas.chat_schema import ChatRequest, ConfirmRequest, LocationRequest
+from schemas.chat_schema import ChatRequest, ConfirmRequest, LocationRequest, ScreenAnalysisRequest
 from models.session_model import Session as ChatSession
 from crud.chat_crud import (
     get_all_messages_by_session,
@@ -24,6 +24,8 @@ from services.agent.location_store import update_location
 from services.memory.background_service import run_summary_background
 from services.memory.profile_service import _parse_memory_request
 from services.speech.tts_service import synthesize
+from services.llm.llm_service import analyze_screen
+from starlette.concurrency import run_in_threadpool
 
 
 logger = get_logger("chat_endpoint")
@@ -124,7 +126,9 @@ async def send_message_stream(
     """
     return StreamingResponse(
         _stream_sse(
-            process_message_stream(db, req.session_id, req.message),
+            process_message_stream(
+                db, req.session_id, req.message, req.image_b64
+            ),
             background_tasks,
         ),
         media_type="text/event-stream",
@@ -275,3 +279,23 @@ def update_location_endpoint(req: LocationRequest):
     """
     update_location(req.lat, req.lng)
     return {"ok": True}
+
+
+# ─────────────────────────────────────
+# 9. 이미지 스크린샷 분석
+# ─────────────────────────────────────
+@router.post("/screen", status_code=status.HTTP_200_OK)
+async def analyze_screen_endpoint(req: ScreenAnalysisRequest):
+    """
+    브라우저가 보낸 스크린샷을 VLM으로 분석한다.
+    할 말 없으면 speak="" 반환.
+    """
+    result = await run_in_threadpool(analyze_screen, req.image_b64)
+    audio_b64 = None
+    if result:
+        try:
+            tts_bytes = await synthesize(result)
+            audio_b64 = base64.b64encode(tts_bytes).decode("utf-8")
+        except Exception:
+            pass
+    return {"speak": result, "audio_b64": audio_b64}
