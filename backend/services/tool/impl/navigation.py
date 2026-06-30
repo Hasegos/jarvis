@@ -249,6 +249,7 @@ def run(args: dict) -> str:
                 client.post(
                     f"{settings.STT_SERVER_URL}/browse",
                     json={"url": browse_url},
+                    headers={"X-Internal-Token": settings.INTERNAL_API_TOKEN},
                 )
             except Exception as e:
                 logger.debug("navigation 브라우저 열기 실패(무시): %s", e)
