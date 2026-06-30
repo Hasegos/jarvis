@@ -1,10 +1,13 @@
-import os, subprocess, tempfile, webbrowser
+import hmac, os, subprocess, tempfile, webbrowser
 from pathlib import Path
 
 import psutil
 from fastapi import Body, FastAPI, File, HTTPException, UploadFile, status
 from faster_whisper import WhisperModel
 from pydub import AudioSegment
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
 
 from core.config import settings
 from core.constants.speech import (
@@ -59,6 +62,7 @@ def _collect_allowed_apps() -> dict:
 ALLOWED_APPS = _collect_allowed_apps()
 
 _BYTES_PER_GB = 1024 ** 3
+_MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
 # ─────────────────────────────────────
@@ -74,16 +78,27 @@ try:
 except Exception as e:
     raise RuntimeError(f"STT 모델 로드 실패: {e}")
 
+if not settings.INTERNAL_API_TOKEN.strip():
+    raise RuntimeError("INTERNAL_API_TOKEN이 비어 있습니다.")
+
 app = FastAPI(title="Jarvis STT Server")
 
 
-# ─────────────────────
-# 3. 헬스체크
-# ─────────────────────
-@app.get("/health")
-def health():
-    """STT 서버 정상 동작 확인."""
-    return {"status": "ok"}
+# ─────────────────────────────────────
+# 3. 인증 미들웨어 (X-Internal-Token)
+# ─────────────────────────────────────
+class TokenAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if request.method == "OPTIONS" or request.url.path == "/health":
+            return await call_next(request)
+        if not hmac.compare_digest(
+            request.headers.get("X-Internal-Token", ""),
+            settings.INTERNAL_API_TOKEN,
+        ):
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+
+app.add_middleware(TokenAuthMiddleware)
 
 
 # ─────────────────────
@@ -110,7 +125,13 @@ async def transcribe(file: UploadFile = File(...)):
         # ──────────────────────────────────────
         suffix = os.path.splitext(file.filename or "audio.webm")[1] or ".webm"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-            f.write(await file.read())
+            data = await file.read(_MAX_AUDIO_BYTES + 1)
+            if len(data) > _MAX_AUDIO_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="파일이 너무 큽니다 (최대 25MB)",
+                )
+            f.write(data)
             tmp_input = f.name
 
         # ──────────────────────────────────────
@@ -192,7 +213,7 @@ def action(payload: dict = Body(...)):
 
     try:
         # Popen으로 비차단 실행 — 자식 프로세스를 띄우고 즉시 반환한다.
-        proc = subprocess.Popen(f'"{app_conf["exe"]}"', shell=True)
+        proc = subprocess.Popen([app_conf["exe"]], shell=False)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -248,9 +269,9 @@ def system_info():
     return {"cpu_percent": cpu_percent, "memory": memory, "disk": disk}
 
 
-# ─────────────────────
+# ────────────────────────────
 # 7. 브라우저 열기 (URL 열기)
-# ─────────────────────
+# ────────────────────────────
 @app.post("/browse")
 def browse(payload: dict = Body(...)):
     """
@@ -280,3 +301,12 @@ def browse(payload: dict = Body(...)):
 
     logger.info("브라우저 열기: %s", url)
     return {"ok": True, "url": url}
+
+
+# ─────────────────────
+# 8. 헬스체크
+# ─────────────────────
+@app.get("/health")
+def health():
+    """STT 서버 정상 동작 확인."""
+    return {"status": "ok"}
