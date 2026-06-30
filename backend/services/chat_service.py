@@ -28,6 +28,8 @@ from services.knowledge.wiki_service import search_wiki
 from services.llm.text_utils import strip_markdown
 from services.memory.profile_service import _build_profile_context
 from services.memory.rag_service import _build_rag_context
+from services.llm.llm_service import build_vlm_messages
+
 
 logger = get_logger("chat_service")
 
@@ -91,6 +93,7 @@ async def _prepare_turn(
     db: Session,
     session_id: int | None,
     user_text: str,
+    image_b64=None,
 ) -> tuple[ChatSession, list[dict], list[float], str | None, float]:
     """
     한 턴 처리에 필요한 공통 재료를 조립한다.
@@ -110,7 +113,20 @@ async def _prepare_turn(
         get_messages_by_session, db, session.session_id, settings.HISTORY_LIMIT,
     )
     history = [{"role": msg.role, "content": msg.content} for msg in messages]
-    history.append({"role": "user", "content": user_text})
+    
+    if image_b64:
+        history.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                },
+                {"type": "text", "text": user_text},
+            ],
+        })
+    else:
+        history.append({"role": "user", "content": user_text})
 
     # ──────────────────────────────────────
     # 3-2. user 임베딩 + 프로필/위키/RAG 컨텍스트
@@ -165,6 +181,7 @@ async def process_message_stream(
     db: Session,
     session_id: int | None,
     user_text: str,
+    image_b64=None
 ):
     """
     단일 스트리밍 파이프라인 — 채팅·음성 모두 이 함수 하나를 거친다.
@@ -197,7 +214,7 @@ async def process_message_stream(
     # 5-2. 공통 턴 준비
     # ──────────────────────────────────────
     session, history, user_embedding, context, embed_sec = await _prepare_turn(
-        db, session_id, user_text
+        db, session_id, user_text, image_b64
     )
     timings: dict = {"embedding": embed_sec}
 
@@ -213,7 +230,17 @@ async def process_message_stream(
         len(user_text),
     )
 
-    gen = stream_chat_with_tools(history, use_thinking, context, forced_tools)
+    if image_b64:
+        vlm_messages = build_vlm_messages(user_text, image_b64, context)
+        gen = stream_chat_with_tools(
+            vlm_messages, use_thinking,
+            context      = None,
+            forced_tools = forced_tools,
+            use_raw_history = True,
+        )
+    else:
+        gen = stream_chat_with_tools(history, use_thinking, context, forced_tools)
+
     async for ev in _consume_agent_stream(
         db, gen, session.session_id, user_text, user_embedding, timings
     ):
