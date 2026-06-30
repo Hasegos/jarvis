@@ -1,4 +1,4 @@
-import re, time
+import asyncio, re, time
 
 from sqlalchemy.orm import Session
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
@@ -132,16 +132,16 @@ async def _prepare_turn(
     # 3-2. user 임베딩 + 프로필/위키/RAG 컨텍스트
     # ──────────────────────────────────────
     t0 = time.perf_counter()
-    user_embedding = await run_in_threadpool(embed_text, user_text)
+    user_embedding, wiki_context, profile_context = await asyncio.gather(
+        run_in_threadpool(embed_text, user_text),
+        run_in_threadpool(search_wiki, user_text),
+        run_in_threadpool(_build_profile_context, db, user_text),
+    )
     embed_sec = round(time.perf_counter() - t0, 2)
 
     rag_context = await run_in_threadpool(
         _build_rag_context, db, user_embedding, session.session_id
     )
-    profile_context = await run_in_threadpool(
-        _build_profile_context, db, user_text
-    )
-    wiki_context = await run_in_threadpool(search_wiki, user_text)
 
     context = (
         "\n\n".join(c for c in (profile_context, wiki_context, rag_context) if c)
