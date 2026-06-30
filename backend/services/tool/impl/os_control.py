@@ -9,7 +9,9 @@ from services.tool.tool_result import ok, err
 
 logger = get_logger("tool.os_control")
 
-# 위험도 
+_http_client = httpx.Client(timeout=OS_CONTROL_TIMEOUT)
+
+# 위험도
 RISK = "safe"
 
 # STT 음성 오인식 보정
@@ -130,66 +132,72 @@ def run(args: dict) -> str:
     """
     action = (args.get("action") or "").strip()
 
+    _auth = {"X-Internal-Token": settings.INTERNAL_API_TOKEN}
+
     try:
-        with httpx.Client(timeout=OS_CONTROL_TIMEOUT) as client:
-            # ──────────────────────────────────────
-            # 2-1. launch — 앱 실행 위임
-            # ──────────────────────────────────────
-            if action == "launch":
-                target = (args.get("target") or "").strip()
-                if not target:
-                    return err("실행할 앱을 지정해 주세요.")
-                target = TARGET_ALIASES.get(target, target)
-                response = client.post(
-                    f"{settings.STT_SERVER_URL}/action",
-                    json={"action": "launch", "target": target},
-                )
-                response.raise_for_status()
-                data = response.json()
-                return ok(launched=True, pid=data.get("pid"), label=data.get("label"))
+        # ──────────────────────────────────────
+        # 2-1. launch — 앱 실행 위임
+        # ──────────────────────────────────────
+        if action == "launch":
+            target = (args.get("target") or "").strip()
+            if not target:
+                return err("실행할 앱을 지정해 주세요.")
+            target = TARGET_ALIASES.get(target, target)
+            response = _http_client.post(
+                f"{settings.STT_SERVER_URL}/action",
+                json={"action": "launch", "target": target},
+                headers=_auth,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return ok(launched=True, pid=data.get("pid"), label=data.get("label"))
 
-            # ──────────────────────────────────────
-            # 2-2. system_info — 시스템 정보 조회
-            # ──────────────────────────────────────
-            if action == "system_info":
-                response = client.get(f"{settings.STT_SERVER_URL}/system-info")
-                response.raise_for_status()
-                data = response.json()
-                return ok(
-                    cpu_percent=data.get("cpu_percent"),
-                    memory=data.get("memory"),
-                    disk=data.get("disk"),
-                )
+        # ──────────────────────────────────────
+        # 2-2. system_info — 시스템 정보 조회
+        # ──────────────────────────────────────
+        if action == "system_info":
+            response = _http_client.get(
+                f"{settings.STT_SERVER_URL}/system-info",
+                headers=_auth,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return ok(
+                cpu_percent=data.get("cpu_percent"),
+                memory=data.get("memory"),
+                disk=data.get("disk"),
+            )
 
+        # ──────────────────────────────────────
+        # 2-3. browse — URL을 기본 브라우저로 열기
+        # ──────────────────────────────────────
+        if action == "browse":
+            site  = (args.get("site") or "").strip().lower()
+            query = (args.get("query") or "").strip()
+            url   = (args.get("url") or "").strip()
             # ──────────────────────────────────────
-            # 2-3. browse — URL을 기본 브라우저로 열기
+            # 2-3-1. site+query → 코드가 URL 조립.
             # ──────────────────────────────────────
-            if action == "browse":
-                site  = (args.get("site") or "").strip().lower()
-                query = (args.get("query") or "").strip()
-                url   = (args.get("url") or "").strip()
-                # ──────────────────────────────────────
-                # 2-3-1. site+query → 코드가 URL 조립.
-                # ──────────────────────────────────────
-                if site in SITE_TEMPLATES:
-                    target_url = SITE_TEMPLATES[site].format(
-                        query=urllib.parse.quote(query)
-                    )
-                # ──────────────────────────────────────
-                # 2-3-2. site 없이 url만 → 그대로 연다.
-                # ──────────────────────────────────────
-                elif url:
-                    target_url = url
-                else:
-                    return err("열 사이트나 URL을 지정해 주세요.")
-
-                response = client.post(
-                    f"{settings.STT_SERVER_URL}/browse",
-                    json={"url": target_url},
+            if site in SITE_TEMPLATES:
+                target_url = SITE_TEMPLATES[site].format(
+                    query=urllib.parse.quote(query)
                 )
-                response.raise_for_status()
-                data = response.json()
-                return ok(opened=True, url=data.get("url"))
+            # ──────────────────────────────────────
+            # 2-3-2. site 없이 url만 → 그대로 연다.
+            # ──────────────────────────────────────
+            elif url:
+                target_url = url
+            else:
+                return err("열 사이트나 URL을 지정해 주세요.")
+
+            response = _http_client.post(
+                f"{settings.STT_SERVER_URL}/browse",
+                json={"url": target_url},
+                headers=_auth,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return ok(opened=True, url=data.get("url"))
 
         return err("지원하지 않는 작업입니다.")
 
