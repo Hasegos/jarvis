@@ -1,9 +1,12 @@
+import hmac
+
 from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -25,6 +28,11 @@ async def lifespan(app: FastAPI):
 
     시작 시 AUTO_CREATE_TABLES가 True면 테이블을 자동 생성한다.
     """
+    if not settings.INTERNAL_API_TOKEN.strip():
+        raise RuntimeError(
+            "INTERNAL_API_TOKEN이 비어 있습니다."
+        )
+
     if settings.AUTO_CREATE_TABLES:
         # ──────────────────────────────────────
         # 1-1. pgvector extension 활성화
@@ -85,7 +93,24 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 
 # ─────────────────────────────────────
-# 5. CORS 미들웨어
+# 5. 내부 API 인증 미들웨어
+# ─────────────────────────────────────
+class TokenAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if request.method == "OPTIONS" or request.url.path == "/health":
+            return await call_next(request)
+        if not hmac.compare_digest(
+            request.headers.get("X-Internal-Token", ""),
+            settings.INTERNAL_API_TOKEN,
+        ):
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+
+app.add_middleware(TokenAuthMiddleware)
+
+
+# ─────────────────────────────────────
+# 6. CORS 미들웨어
 # ─────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
@@ -96,7 +121,7 @@ app.add_middleware(
         "http://127.0.0.1:8000",
     ],
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Internal-Token"],
 )
 
 
