@@ -28,12 +28,8 @@ logger = get_logger("agent_service")
 # ─────────────────────────────────────
 _MAX_TOOL_CALLS_PER_TURN = 1
 
-# 한 회차에 같은 도구를 부를 수 있는 최대 횟수 (후처리 보조).
-_MAX_CALLS_PER_TOOL = {
-    "vault_write": 1,
-    "web_search": 1,
-}
-_DEFAULT_MAX_CALLS = 1
+# 한 회차에 도구당 호출 가능한 최대 횟수.
+_MAX_CALLS_PER_TOOL = 1
 
 # 1회 실행 후 이후 회차 후보에서 제외할 도구.
 _DEDUP_TOOLS = frozenset({"vault_write", "web_search"})
@@ -87,10 +83,9 @@ def _dedup_tool_calls(calls: list, name_of) -> list:
     out = []
     for c in calls:
         name = name_of(c)
-        limit = _MAX_CALLS_PER_TOOL.get(name, _DEFAULT_MAX_CALLS)
         n = counts.get(name, 0)
-        if n >= limit:
-            logger.debug("도구 호출 상한 초과 무시: %s (상한 %d)", name, limit)
+        if n >= _MAX_CALLS_PER_TOOL:
+            logger.debug("도구 호출 상한 초과 무시: %s (상한 %d)", name, _MAX_CALLS_PER_TOOL)
             continue
         counts[name] = n + 1
         out.append(c)
@@ -347,7 +342,7 @@ def _consume_llm_stream(
     """
     LLM 스트림을 읽어 텍스트 토큰을 yield하고, content_parts·tool_acc를
     제자리에서 채운다. 회차당 도구 상한(_MAX_TOOL_CALLS_PER_TURN)을 넘으면
-    스트림을 끊는다 (B 가드).
+    스트림을 끊는다.
 
     Args:
         stream       : lm_client 스트리밍 응답
