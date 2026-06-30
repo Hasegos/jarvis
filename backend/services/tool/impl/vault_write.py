@@ -220,7 +220,7 @@ def run(args: dict) -> str:
         title, tags, body = organized["title"], organized["tags"], organized["body"]
         category = organized["category"]
     else:
-        title    = "메모"
+        title    = content[:50].strip() or "메모"
         tags     = []
         body     = content
         category = MEMO_DEFAULT_CATEGORY
