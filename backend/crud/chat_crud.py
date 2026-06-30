@@ -104,9 +104,9 @@ def create_message(
     # ──────────────────────────────────────
     # 4-1. 세션 last_active_at 갱신
     # ──────────────────────────────────────
-    session = get_session_by_id(db, session_id)
-    if session:
-        session.last_active_at = datetime.now(timezone.utc)
+    db.query(ChatSession).filter(
+        ChatSession.session_id == session_id
+    ).update({"last_active_at": datetime.now(timezone.utc)})
 
     db.commit()
     db.refresh(message)
@@ -178,10 +178,10 @@ def update_session_summary(
         session_id: 갱신할 세션 PK
         summary   : LLM이 생성한 요약 텍스트
     """
-    session = get_session_by_id(db, session_id)
-    if session:
-        session.summary = summary
-        db.commit()
+    db.query(ChatSession).filter(
+        ChatSession.session_id == session_id
+    ).update({"summary": summary})
+    db.commit()
 
 
 # ───────────────────────────────────────────
