@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     NAVER_MAP_CLIENT_SECRET: str
     
     # ───────────────────────────────
-    # 5. VLM / 능동 발화 설정 (신규)
+    # 5. VLM / 능동 발화 설정
     # ───────────────────────────────
     VLM_ENABLED              : bool
     VLM_MAX_IMAGE_SIZE       : int
