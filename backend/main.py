@@ -2,14 +2,13 @@ from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from api.router import api_router
 from core.config import settings
-from core.templates import templates
 from db.session import engine
 from db.base import Base
 
@@ -55,16 +54,16 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+# ─────────────────────────────────────
+# 4. CSP 보안 헤더
+# ─────────────────────────────────────
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' "
-            "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob:; "
-            "connect-src 'self' http://localhost:8000; "
+            "connect-src 'self'; "
             "media-src 'self' blob: data:;"
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -74,8 +73,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
+
 # ─────────────────────────────────────
-# 4. CORS 미들웨어
+# 5. CORS 미들웨어
 # ─────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
@@ -91,18 +91,9 @@ app.add_middleware(
 
 
 # ─────────────────────────────────────
-# 5. 라우터 등록
+# 6. 라우터 등록
 # ─────────────────────────────────────
 app.include_router(api_router, prefix="/api/v1")
-
-
-# ─────────────────────────────────────
-# 6. 웹 페이지
-# ─────────────────────────────────────
-@app.get("/", include_in_schema=False)
-async def index(request: Request):
-    """자비스 홀로그램 메인 UI 서빙."""
-    return templates.TemplateResponse(request, "hologram.html")
 
 
 # ─────────────────────────────────────
