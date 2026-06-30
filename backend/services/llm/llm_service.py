@@ -1,5 +1,5 @@
 from core.config import settings
-from core.constants.prompts import SYSTEM_PROMPT
+from core.constants.prompts import SYSTEM_PROMPT, SCREEN_ANALYSIS_PROMPT
 from core.logger import get_logger
 from services.llm.lm_client import lm_client
 from services.llm.text_utils import strip_thinking
@@ -118,3 +118,58 @@ def generate_summary(history: list[dict]) -> str:
     except Exception as e:
         logger.warning("요약 생성 오류: %s", e)
         raise RuntimeError(f"요약 생성 오류: {e}")
+    
+
+# ──────────────────────────────────────
+# 4. VLM 멀티모달 메시지 빌드
+# ──────────────────────────────────────
+def build_vlm_messages(
+    user_text : str,
+    image_b64 : str,
+    context   : str | None = None,
+) -> list[dict]:
+    """
+    이미지 + 텍스트를 OpenAI Vision 형식 메시지로 빌드한다.
+    Qwen2.5-VL은 content를 list[dict] 형태로 받는다.
+    """
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if context:
+        messages.append({"role": "system", "content": context})
+    messages.append({
+        "role": "user",
+        "content": [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+            },
+            {"type": "text", "text": user_text},
+        ],
+    })
+    return messages
+
+
+# ──────────────────────────────────────
+# 5. 화면 분석 단독 호출
+# ──────────────────────────────────────
+def analyze_screen(image_b64: str) -> str:
+    """
+    스크린샷을 VLM에 보내 화면 상태를 분석한다. 비스트리밍.
+    할 말 없으면 빈 문자열 반환.
+    """
+    if not settings.VLM_ENABLED:
+        return ""
+    try:
+        messages = build_vlm_messages(SCREEN_ANALYSIS_PROMPT, image_b64)
+        response = lm_client.chat.completions.create(
+            model       = settings.LM_STUDIO_MODEL,
+            messages    = messages,
+            timeout     = settings.LM_STUDIO_TIMEOUT,
+            temperature = 0.3,
+            max_tokens  = 150,
+        )
+        if not response.choices:
+            return ""
+        return (response.choices[0].message.content or "").strip()
+    except Exception as e:
+        logger.warning("화면 분석 오류: %s", e)
+        return ""
