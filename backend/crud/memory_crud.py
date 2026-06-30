@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from models.memory_profile_model import MemoryProfile
 
@@ -54,7 +55,9 @@ def upsert_section(db: Session, section: str, content: str) -> MemoryProfile:
     """
     섹션의 content를 갱신한다. 섹션이 없으면 새로 생성한다.
 
-    섹션은 UNIQUE라 섹션당 1행이며, 백그라운드 갱신에서 호출된다.
+    PostgreSQL의 INSERT ... ON CONFLICT를 사용해 DB 레벨에서
+    원자적으로 처리한다. ON CONFLICT는 DB가 행 잠금을 보장하므로
+    이 레이스를 원천적으로 제거한다.
 
     Args:
         db     : SQLAlchemy 세션
@@ -63,21 +66,19 @@ def upsert_section(db: Session, section: str, content: str) -> MemoryProfile:
     Returns:
         갱신/생성된 MemoryProfile 객체
     """
-    row = (
+    stmt = pg_insert(MemoryProfile).values(
+        section=section,
+        content=content,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["section"],
+        set_={"content": stmt.excluded.content},
+    )
+    db.execute(stmt)
+    db.commit()
+
+    return (
         db.query(MemoryProfile)
         .filter(MemoryProfile.section == section)
         .first()
     )
-
-    # ──────────────────────────────────────
-    # 3-1. 기존 섹션이면 갱신, 없으면 생성
-    # ──────────────────────────────────────
-    if row is None:
-        row = MemoryProfile(section=section, content=content)
-        db.add(row)
-    else:
-        row.content = content
-
-    db.commit()
-    db.refresh(row)
-    return row
