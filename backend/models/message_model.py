@@ -15,6 +15,8 @@ class Message(Base):
     __table_args__ = (
         CheckConstraint("role IN ('user', 'assistant')", name="ck_messages_role"),
 
+        Index("ix_messages_session_id", "session_id"),
+
         # 임베딩 벡터 검색용 HNSW 인덱스 (코사인 거리)
         Index(
             "ix_messages_embedding_hnsw",
