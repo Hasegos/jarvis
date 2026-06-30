@@ -71,9 +71,18 @@ class Settings(BaseSettings):
     # 네이버 지도
     NAVER_MAP_CLIENT_ID: str
     NAVER_MAP_CLIENT_SECRET: str
+    
+    # ───────────────────────────────
+    # 5. VLM / 능동 발화 설정 (신규)
+    # ───────────────────────────────
+    VLM_ENABLED              : bool
+    VLM_MAX_IMAGE_SIZE       : int
+    IMAGE_B64_MAX_BYTES      : int
+    TTS_TEXT_MAX_LEN         : int
+    PROACTIVE_MIN_INTERVAL_SEC: int
 
     # ──────────────────────────
-    # 5. 계산된 프로퍼티 (DB URL)
+    # 6. 계산된 프로퍼티 (DB URL)
     # ──────────────────────────
     @property
     def SQLALCHEMY_DATABASE_URL(self) -> str:
@@ -87,7 +96,7 @@ class Settings(BaseSettings):
         )
 
     # ──────────────────────────
-    # 6. 환경 설정 로드 구성
+    # 7. 환경 설정 로드 구성
     # ──────────────────────────
     model_config = SettingsConfigDict(
         env_file = ".env",
@@ -97,6 +106,6 @@ class Settings(BaseSettings):
 
 
 # ──────────────────────
-# 7. 설정 객체 인스턴스화
+# 8. 설정 객체 인스턴스화
 # ──────────────────────
 settings = Settings()
