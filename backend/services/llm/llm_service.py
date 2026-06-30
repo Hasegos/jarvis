@@ -88,6 +88,8 @@ def generate_summary(history: list[dict]) -> str:
         history: user/assistant 대화 히스토리
     Returns:
         한 단어 요약. 실패 시 빈 문자열.
+    Raises:
+        RuntimeError: 요약 생성 실패 (원본 예외는 로그에만 남김)
     """
     conversation = "\n".join(
         f"{m['role']}: {m['content']}" for m in history
@@ -115,9 +117,11 @@ def generate_summary(history: list[dict]) -> str:
         content = response.choices[0].message.content or ""
         word = strip_thinking(content).strip().split()[0] if content.strip() else ""
         return word
+    except RuntimeError:
+        raise
     except Exception as e:
         logger.warning("요약 생성 오류: %s", e)
-        raise RuntimeError(f"요약 생성 오류: {e}")
+        raise RuntimeError("요약 생성 중 오류가 발생했습니다.") from None
     
 
 # ──────────────────────────────────────
