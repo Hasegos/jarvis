@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 # ─────────────────────
@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     """
     session_id : Optional[int] = None
     message    : str
+    image_b64  : Optional[str] = None
 
 
 # ───────────────────────
@@ -58,3 +59,21 @@ class LocationRequest(BaseModel):
     """
     lat : float
     lng : float
+    
+
+# ────────────────────────────────────
+# 5. 화면 스크린샷 분석 요청 스키마
+# ────────────────────────────────────
+class ScreenAnalysisRequest(BaseModel):
+    """
+    브라우저가 주기적으로 보내는 화면 스크린샷 분석 요청
+    """
+    image_b64  : str = Field(..., min_length=1)
+    session_id : Optional[int] = None
+
+    @field_validator("image_b64")
+    @classmethod
+    def validate_image_size(cls, v: str) -> str:
+        if len(v.encode()) > 2_000_000:
+            raise ValueError("image_b64가 허용 크기(2MB)를 초과합니다.")
+        return v
