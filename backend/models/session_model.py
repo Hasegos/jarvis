@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Text, TIMESTAMP, func
+from sqlalchemy import BigInteger, Text, TIMESTAMP, func, Index
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from db.base_class import Base
@@ -9,6 +9,10 @@ from db.base_class import Base
 
 class Session(Base):
     __tablename__ = "sessions"
+
+    __table_args__ = (
+        Index("ix_sessions_last_active_at", "last_active_at"),
+    )
 
     session_id     : Mapped[int]                = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     summary        : Mapped[Optional[str]]      = mapped_column(Text, nullable=True)
