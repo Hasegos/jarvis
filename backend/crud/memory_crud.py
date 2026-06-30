@@ -77,8 +77,4 @@ def upsert_section(db: Session, section: str, content: str) -> MemoryProfile:
     db.execute(stmt)
     db.commit()
 
-    return (
-        db.query(MemoryProfile)
-        .filter(MemoryProfile.section == section)
-        .first()
-    )
+    return MemoryProfile(section=section, content=content)
