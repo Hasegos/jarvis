@@ -14,8 +14,15 @@ class ChatRequest(BaseModel):
         message   : 사용자 입력 텍스트.
     """
     session_id : Optional[int] = None
-    message    : str
+    message    : str = Field(..., max_length=10_000)
     image_b64  : Optional[str] = None
+
+    @field_validator("image_b64")
+    @classmethod
+    def validate_image_b64(cls, v: str | None) -> str | None:
+        if v is not None and len(v.encode()) > 2_000_000:
+            raise ValueError("image_b64가 허용 크기(2MB)를 초과합니다.")
+        return v
 
 
 # ───────────────────────
@@ -43,7 +50,7 @@ class TtsRequest(BaseModel):
     Args:
         text: 합성할 텍스트.
     """
-    text : str
+    text : str = Field(..., max_length=5_000)
 
 
 # ─────────────────────
