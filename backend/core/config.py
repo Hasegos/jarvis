@@ -81,8 +81,13 @@ class Settings(BaseSettings):
     TTS_TEXT_MAX_LEN         : int
     PROACTIVE_MIN_INTERVAL_SEC: int
 
+    # ───────────────────────────────
+    # 6. 내부 API 인증 토큰
+    # ───────────────────────────────
+    INTERNAL_API_TOKEN: str
+
     # ──────────────────────────
-    # 6. 계산된 프로퍼티 (DB URL)
+    # 7. 계산된 프로퍼티 (DB URL)
     # ──────────────────────────
     @property
     def SQLALCHEMY_DATABASE_URL(self) -> str:
@@ -96,7 +101,7 @@ class Settings(BaseSettings):
         )
 
     # ──────────────────────────
-    # 7. 환경 설정 로드 구성
+    # 8. 환경 설정 로드 구성
     # ──────────────────────────
     model_config = SettingsConfigDict(
         env_file = ".env",
@@ -106,6 +111,6 @@ class Settings(BaseSettings):
 
 
 # ──────────────────────
-# 8. 설정 객체 인스턴스화
+# 9. 설정 객체 인스턴스화
 # ──────────────────────
 settings = Settings()
