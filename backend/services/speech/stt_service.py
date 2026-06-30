@@ -21,7 +21,7 @@ async def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
     Returns:
         인식된 텍스트
     Raises:
-        RuntimeError: STT 서버 연결 실패, 오류
+        RuntimeError: STT 서버 연결 실패, 오류 (원본 예외는 로그에만 남김)
     """
     try:
         async with httpx.AsyncClient(timeout=settings.STT_TIMEOUT) as client:
@@ -41,4 +41,4 @@ async def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
         raise RuntimeError("STT 서버 응답 타임아웃.")
     except Exception as e:
         logger.error("STT 오류: %s", e)
-        raise RuntimeError(f"STT 오류: {e}")
+        raise RuntimeError("STT 처리 중 오류가 발생했습니다.") from None
