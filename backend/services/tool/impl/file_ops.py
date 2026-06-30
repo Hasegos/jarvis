@@ -425,10 +425,10 @@ def run(args: dict) -> str:
         if action == "read":
             if not p.is_file():
                 return err("파일이 없습니다.")
-            text = p.read_text(encoding="utf-8", errors="replace")
+            with p.open("r", encoding="utf-8", errors="replace") as f:
+                text = f.read(FILE_OPS_READ_MAX_CHARS + 1)
             truncated = len(text) > FILE_OPS_READ_MAX_CHARS
-            if truncated:
-                text = text[:FILE_OPS_READ_MAX_CHARS]
+            text = text[:FILE_OPS_READ_MAX_CHARS]
             return ok(content=text, path=host_display, truncated=truncated)
 
         # ──────────────────────────────────────
