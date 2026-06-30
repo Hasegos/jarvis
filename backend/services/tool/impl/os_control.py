@@ -207,8 +207,29 @@ def run(args: dict) -> str:
         return err("OS 조작 중 오류가 발생했습니다.")
 
 
+# ─────────────────────────
+# 3. confirm 필요 여부 판정
+# ─────────────────────────
+def needs_confirm(args: dict) -> bool:
+    """
+    browse에서 site 템플릿 없이 임의 url을 직접 여는 경우만 confirm을 요구한다.
+
+    Args:
+        args: 도구 인자 dict
+    Returns:
+        confirm이 필요하면 True
+    """
+    action = (args.get("action") or "").strip()
+    if action != "browse":
+        return False
+
+    site = (args.get("site") or "").strip().lower()
+    url  = (args.get("url") or "").strip()
+    return bool(url) and site not in SITE_TEMPLATES
+
+
 # ─────────────────────
-# 3. 실행 미리보기
+# 4. 실행 미리보기
 # ─────────────────────
 def preview(args: dict) -> str:
     """
@@ -237,7 +258,7 @@ def preview(args: dict) -> str:
 
 
 # ─────────────────────
-# 4. 도구 안내 문구
+# 5. 도구 안내 문구
 # ─────────────────────
 def announce(args: dict) -> tuple[str, str]:
     """
