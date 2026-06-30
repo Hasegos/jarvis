@@ -28,6 +28,7 @@ async def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
             response = await client.post(
                 f"{settings.STT_SERVER_URL}/transcribe",
                 files={"file": (filename, audio_bytes)},
+                headers={"X-Internal-Token": settings.INTERNAL_API_TOKEN},
             )
             response.raise_for_status()
             return response.json().get("text", "")
