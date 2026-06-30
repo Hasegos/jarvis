@@ -27,6 +27,8 @@ logger = get_logger("voice_endpoint")
 
 router = APIRouter()
 
+_MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
 
 # ─────────────────────
 # 1. 음성 대화
@@ -61,7 +63,12 @@ async def voice_chat(
     # 1-1. STT — 음성 → 텍스트
     # ──────────────────────────────────────
     t0 = time.perf_counter()
-    audio_bytes = await file.read()
+    audio_bytes = await file.read(_MAX_AUDIO_BYTES + 1)
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="오디오 파일이 너무 큽니다 (최대 25MB).",
+        )
     try:
         user_text = await transcribe_audio(audio_bytes, file.filename or "audio.webm")
     except RuntimeError as e:
