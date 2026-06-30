@@ -5,6 +5,7 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    Query,
     status,
     HTTPException
 )
@@ -176,18 +177,26 @@ async def confirm_action(
     "/sessions",
     status_code=status.HTTP_200_OK,
 )
-def get_sessions(db: Session = Depends(get_db)):
+def get_sessions(
+    limit : int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db    : Session = Depends(get_db),
+):
     """
     전체 세션 목록을 최근 활동순으로 반환한다.
 
     Args:
-        db: SQLAlchemy 세션
+        limit : 반환할 최대 세션 수 (기본 50)
+        offset: 건너뛸 세션 수 (페이지네이션용)
+        db    : SQLAlchemy 세션
     Returns:
         세션 목록 (session_id, started_at, last_active_at, summary)
     """
     sessions = (
         db.query(ChatSession)
         .order_by(func.coalesce(ChatSession.last_active_at, ChatSession.started_at).desc())
+        .limit(limit)
+        .offset(offset)
         .all()
     )
     return [
