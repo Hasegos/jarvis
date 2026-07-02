@@ -183,9 +183,11 @@ def run(args: dict) -> str:
                     query=urllib.parse.quote(query)
                 )
             # ──────────────────────────────────────
-            # 2-3-2. site 없이 url만 → 그대로 연다.
+            # 2-3-2. site 없이 url만 → 스킵 검증 후 연다.
             # ──────────────────────────────────────
             elif url:
+                if not url.lower().startswith(("http://", "https://")):
+                    return err("http/https URL만 열 수 있습니다.")
                 target_url = url
             else:
                 return err("열 사이트나 URL을 지정해 주세요.")
