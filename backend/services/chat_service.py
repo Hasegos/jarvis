@@ -98,7 +98,6 @@ async def _prepare_turn(
     db: Session,
     session_id: int | None,
     user_text: str,
-    image_b64=None,
 ) -> tuple[ChatSession, list[dict], list[float], str | None, float]:
     """
     한 턴 처리에 필요한 공통 재료를 조립한다.
@@ -119,19 +118,8 @@ async def _prepare_turn(
     )
     history = [{"role": msg.role, "content": msg.content} for msg in messages]
 
-    if image_b64:
-        history.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-                },
-                {"type": "text", "text": user_text},
-            ],
-        })
-    else:
-        history.append({"role": "user", "content": user_text})
+    # 이미지 첨부 턴은 VLM 경로(build_vlm_messages)가 별도 메시지를 만들므로 history에는 항상 텍스트만 쌓인다
+    history.append({"role": "user", "content": user_text})
 
     # ──────────────────────────────────────
     # 3-2. user 임베딩 + 프로필/위키/RAG 컨텍스트
@@ -186,7 +174,7 @@ async def process_message_stream(
     db: Session,
     session_id: int | None,
     user_text: str,
-    image_b64=None
+    images_b64: list[str] | None = None,
 ):
     """
     단일 스트리밍 파이프라인 — 채팅·음성 모두 이 함수 하나를 거친다.
@@ -219,7 +207,7 @@ async def process_message_stream(
     # 5-2. 공통 턴 준비
     # ──────────────────────────────────────
     session, history, user_embedding, context, embed_sec = await _prepare_turn(
-        db, session_id, user_text, image_b64
+        db, session_id, user_text
     )
     timings: dict = {"embedding": embed_sec}
 
@@ -228,7 +216,7 @@ async def process_message_stream(
     # ──────────────────────────────────────
     use_thinking = _should_think(user_text)
     forced_tools, agent_type = _resolve_forced_tools(user_text)
-    if image_b64:
+    if images_b64:
         agent_type = "screen"
     system_prompt = AGENT_PROMPTS[agent_type]
     logger.debug(
@@ -239,11 +227,11 @@ async def process_message_stream(
         len(user_text),
     )
 
-    if image_b64:
+    if images_b64:
         # VLM 경로는 use_raw_history=True 라 _build_messages 를 안 거친다.
         # ScreenAgent 프롬프트는 여기서 직접 주입한다.
         vlm_messages = build_vlm_messages(
-            user_text, image_b64, context, system_prompt=system_prompt
+            user_text, images_b64, context, system_prompt=system_prompt
         )
         gen = stream_chat_with_tools(
             vlm_messages, use_thinking,
