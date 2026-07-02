@@ -99,6 +99,12 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
         if request.method == "OPTIONS" or request.url.path == "/health":
             return await call_next(request)
+        if (
+            request.method == "GET"
+            and request.url.path.startswith("/static/web/")
+            and ".." not in request.url.path
+        ):
+            return await call_next(request)
         if not hmac.compare_digest(
             request.headers.get("X-Internal-Token", ""),
             settings.INTERNAL_API_TOKEN,
