@@ -20,8 +20,6 @@ from services.tool.tool_service import (
 )
 from services.tool.tool_result import ok
 
-logger = get_logger("agent_service")
-
 
 # ─────────────────────────────────────
 # 상수 — 도구 호출 가드
@@ -34,9 +32,34 @@ _MAX_CALLS_PER_TOOL = 1
 # 1회 실행 후 이후 회차 후보에서 제외할 도구.
 _DEDUP_TOOLS = frozenset({"vault_write", "web_search"})
 
+logger = get_logger("agent_service")
+
 
 # ─────────────────────────────────────
-# 1. 회차별 도구/선택 결정
+# 1. 도구 결과 → 클라이언트 열기 이벤트
+# ─────────────────────────────────────
+def _open_url_event(result: str) -> dict | None:
+    """
+    도구 결과 JSON에 open_url이 있으면 클라이언트 브라우저 열기 이벤트를 만든다.
+    서버가 아니라 요청을 보낸 기기에서 열도록 SSE로 전달된다 (다기기 대응).
+    http/https 외 스킴은 무시한다.
+
+    Args:
+        result: execute_tool이 반환한 JSON 문자열
+    Returns:
+        {"type": "open_url", "url": str} 또는 None
+    """
+    try:
+        url = json.loads(result).get("open_url")
+        if isinstance(url, str) and url.startswith(("http://", "https://")):
+            return {"type": "open_url", "url": url}
+    except Exception:
+        pass
+    return None
+
+
+# ─────────────────────────────────────
+# 2. 회차별 도구/선택 결정
 # ─────────────────────────────────────
 def _iter_tool_config(
     forced_tools: list[str],
@@ -67,7 +90,7 @@ def _iter_tool_config(
 
 
 # ─────────────────────────────────────
-# 2. 도구 호출 상한 제한 (후처리 보조)
+# 3. 도구 호출 상한 제한 (후처리 보조)
 # ─────────────────────────────────────
 def _dedup_tool_calls(calls: list, name_of) -> list:
     """
@@ -93,7 +116,7 @@ def _dedup_tool_calls(calls: list, name_of) -> list:
 
 
 # ─────────────────────────────────────
-# 3. 도구 스트리밍 루프 (단일 파이프라인)
+# 4. 도구 스트리밍 루프 (단일 파이프라인)
 # ─────────────────────────────────────
 def stream_chat_with_tools(
     history: list[dict],
@@ -134,7 +157,7 @@ def stream_chat_with_tools(
 
 
 # ─────────────────────────────────────
-# 4. 보류 작업 재개 (confirm 승인/거부 후)
+# 5. 보류 작업 재개 (confirm 승인/거부 후)
 # ─────────────────────────────────────
 def resume_tool_loop(rs: dict, approved: bool) -> Iterator[dict]:
     """
@@ -151,6 +174,9 @@ def resume_tool_loop(rs: dict, approved: bool) -> Iterator[dict]:
         result = execute_tool(pt["name"], pt["arguments"])
     else:
         result = ok(cancelled=True, reason="사용자가 실행을 취소했습니다.")
+    open_ev = _open_url_event(result)
+    if open_ev:
+        yield open_ev
     rs["used_tools"].add(pt["name"])
     rs["messages"].append({
         "role": "tool",
@@ -163,7 +189,7 @@ def resume_tool_loop(rs: dict, approved: bool) -> Iterator[dict]:
 
 
 # ─────────────────────────────────────
-# 5. 공통 도구 루프 (최초/재개 공유)
+# 6. 공통 도구 루프 (최초/재개 공유)
 # ─────────────────────────────────────
 def _run_tool_loop(
     messages: list[dict],
@@ -193,7 +219,7 @@ def _run_tool_loop(
 
     for iteration in range(1, TOOL_MAX_ITERATIONS + 1):
         # ──────────────────────────────────────
-        # 5-1. LLM 스트리밍 호출
+        # 6-1. LLM 스트리밍 호출
         # ──────────────────────────────────────
         iter_tools, iter_tool_choice = _iter_tool_config(forced, used_tools)
         logger.debug(
@@ -224,7 +250,7 @@ def _run_tool_loop(
             raise RuntimeError("LLM 호출 중 오류가 발생했습니다.")
 
         # ──────────────────────────────────────────
-        # 5-2. 토큰 / 도구호출 분리 수신 + 폭주 차단
+        # 6-2. 토큰 / 도구호출 분리 수신 + 폭주 차단
         # ──────────────────────────────────────────
         content_parts: list[str] = []
         tool_acc: dict[int, dict] = {}
@@ -244,13 +270,13 @@ def _run_tool_loop(
         )
 
         # ──────────────────────────────────────
-        # 5-3. 도구 호출 없으면 답변 완료
+        # 6-3. 도구 호출 없으면 답변 완료
         # ──────────────────────────────────────
         if not tool_acc:
             return
 
         # ──────────────────────────────────────
-        # 5-4. 도구 실행 → 결과 추가 → 재호출
+        # 6-4. 도구 실행 → 결과 추가 → 재호출
         # ──────────────────────────────────────
         accs = _dedup_tool_calls(
             [tool_acc[i] for i in sorted(tool_acc)],
@@ -283,7 +309,7 @@ def _run_tool_loop(
             }
 
             # ──────────────────────────────────────────────
-            # 5-4-1. confirm 게이트 — destructive는 일시정지
+            # 6-4-1. confirm 게이트 — destructive는 일시정지
             # ──────────────────────────────────────────────
             try:
                 args_obj = json.loads(acc["arguments"] or "{}")
@@ -312,6 +338,9 @@ def _run_tool_loop(
                 return
 
             result = execute_tool(acc["name"], acc["arguments"])
+            open_ev = _open_url_event(result)
+            if open_ev:
+                yield open_ev
             used_tools.add(acc["name"])
             messages.append({
                 "role": "tool",
@@ -320,7 +349,7 @@ def _run_tool_loop(
             })
 
     # ──────────────────────────────────────
-    # 5-5. 반복 초과 — 도구 없이 답변 강제
+    # 6-5. 반복 초과 — 도구 없이 답변 강제
     # ──────────────────────────────────────
     try:
         stream = lm_client.chat.completions.create(
@@ -342,7 +371,7 @@ def _run_tool_loop(
 
 
 # ─────────────────────────────────────────────
-# 6. LLM 스트림 소비 (토큰 yield + 도구호출 누적)
+# 7. LLM 스트림 소비 (토큰 yield + 도구호출 누적)
 # ─────────────────────────────────────────────
 def _consume_llm_stream(
     stream,
