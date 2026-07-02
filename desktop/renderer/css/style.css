@@ -1,0 +1,224 @@
+html,
+body {
+  width: 400px;
+  height: 700px;
+}
+
+/* ══════════════════════════
+  캐릭터 패널
+  ══════════════════════════ */
+.char-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 400px;
+  height: 700px;
+}
+
+/* ══════════════════════════
+  상단 버튼 (.char-btn)
+  ══════════════════════════ */
+.char-btn {
+  position: absolute;
+  top: 8px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(var(--c-accent), 0.4);
+  border-radius: 50%;
+  background: rgba(var(--c-btn), 0.7);
+  font-size: 12px;
+  color: rgba(var(--c-text), 0.85);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.char-btn:hover {
+  background: rgba(var(--c-accent), 0.25);
+}
+
+.char-btn--active {
+  background: rgba(var(--c-accent), 0.5);
+}
+
+/* ── 위치·개별 모디파이어 ── */
+.char-btn--sessions {
+  left: 8px;
+}
+
+.char-btn--visibility {
+  right: 44px;
+}
+
+.char-btn--opacity {
+  right: 80px;
+  font-size: 13px;
+}
+
+.char-btn--close {
+  right: 8px;
+  border: none;
+  background: rgba(var(--c-danger), 0.7);
+  font-size: 11px;
+  color: rgb(var(--c-white));
+}
+
+.char-btn--close:hover {
+  background: rgba(var(--c-danger), 1);
+}
+
+/* ══════════════════════════
+  Agent 배지
+  ══════════════════════════ */
+.agent-badge {
+  position: absolute;
+  top: 8px;
+  left: 44px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(var(--c-accent), 0.4);
+  border-radius: 14px;
+  background: rgba(var(--c-btn), 0.7);
+  font-size: 11px;
+  color: rgba(var(--c-text), 0.85);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ══════════════════════════
+  투명도 팝업
+  ══════════════════════════ */
+.opacity-popup {
+  position: absolute;
+  top: 44px;
+  right: 8px;
+  z-index: 201;
+  display: none;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(var(--c-accent), 0.3);
+  border-radius: 8px;
+  background: rgba(var(--c-popup), 0.94);
+  pointer-events: all;
+}
+
+.opacity-popup--open {
+  display: flex;
+}
+
+.opacity-popup__slider {
+  width: 88px;
+}
+
+/* ══════════════════════════
+  Live2D 캔버스
+  ══════════════════════════ */
+.avatar-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 400px;
+  height: 700px;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* ══════════════════════════
+  말풍선
+  ══════════════════════════ */
+.bubble {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  z-index: 50;
+  display: none;
+  max-width: 240px;
+  padding: 10px 14px;
+  border: 1px solid rgba(var(--c-accent), 0.5);
+  border-radius: 12px 12px 12px 0;
+  background: rgba(var(--c-bubble), 0.92);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  color: rgba(var(--c-text-2), 0.95);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.bubble--visible {
+  display: block;
+}
+
+.bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -9px;
+  left: 20px;
+  border-top: 9px solid rgba(var(--c-accent), 0.5);
+  border-left: 9px solid transparent;
+}
+
+/* ══════════════════════════
+  승인/거절 패널
+  ══════════════════════════ */
+.confirm {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 150;
+  width: 340px;
+  padding: 12px 16px;
+  border: 1px solid rgba(var(--c-danger-2), 0.65);
+  border-radius: 12px;
+  background: rgba(var(--c-confirm), 0.95);
+  transform: translateX(-50%);
+}
+
+.confirm__preview {
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  color: rgba(var(--c-preview), 0.95);
+}
+
+.confirm__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm__btn {
+  padding: 5px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.confirm__btn--approve {
+  background: rgba(var(--c-success), 0.75);
+  color: rgb(var(--c-white));
+}
+
+.confirm__btn--approve:hover {
+  background: rgba(var(--c-success), 1);
+}
+
+.confirm__btn--reject {
+  background: rgba(var(--c-danger-2), 0.75);
+  color: rgb(var(--c-reject-text));
+}
+
+.confirm__btn--reject:hover {
+  background: rgba(var(--c-danger-2), 1);
+}

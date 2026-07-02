@@ -1,0 +1,434 @@
+html,
+body {
+  width: 380px;
+  height: 100%;
+}
+
+/* ══════════════════════════
+  패널 컨테이너
+  ══════════════════════════ */
+.session-panel {
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  height: 100%;
+  border: 1px solid rgba(var(--c-accent), 0.18);
+  border-radius: 14px;
+  background: rgba(var(--c-panel), 0.96);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+/* ══════════════════════════
+  헤더
+  ══════════════════════════ */
+.session-panel__header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid rgba(var(--c-accent), 0.1);
+  -webkit-app-region: drag;
+}
+
+.session-panel__title {
+  flex: 1;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: rgba(var(--c-text), 0.9);
+}
+
+.session-panel__header-btns {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+/* ── 헤더 버튼 ── */
+.session-panel__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(var(--c-accent), 0.25);
+  border-radius: 6px;
+  background: rgba(var(--c-accent), 0.1);
+  color: rgba(var(--c-text), 0.8);
+  transition: background 0.15s;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.session-panel__btn:hover {
+  background: rgba(var(--c-accent), 0.25);
+}
+
+.session-panel__btn--back {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+
+.session-panel__btn--opacity,
+.session-panel__btn--minimize,
+.session-panel__btn--new,
+.session-panel__btn--close {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.session-panel__btn--opacity.session-panel__btn--active {
+  background: rgba(var(--c-accent), 0.35);
+}
+
+.session-panel__btn--close:hover {
+  border-color: rgba(var(--c-danger), 0.4);
+  background: rgba(var(--c-danger), 0.3);
+  color: rgb(var(--c-danger-text));
+}
+
+/* ══════════════════════════
+  투명도 슬라이더 행
+  ══════════════════════════ */
+.session-panel__opacity-row {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 4px 12px 6px;
+  border-bottom: 1px solid rgba(var(--c-accent), 0.1);
+}
+
+.session-panel__opacity-label,
+.session-panel__opacity-val {
+  flex-shrink: 0;
+  font-size: 10px;
+  white-space: nowrap;
+  color: rgba(var(--c-muted), 0.5);
+}
+
+.session-panel__opacity-val {
+  width: 28px;
+  text-align: right;
+}
+
+.session-panel__opacity-slider {
+  flex: 1;
+}
+
+/* ══════════════════════════
+  뷰 영역
+  ══════════════════════════ */
+.session-panel__view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ══════════════════════════
+  세션 목록
+  ══════════════════════════ */
+.session-panel__list {
+  flex: 1;
+  padding: 6px 8px;
+  overflow-y: auto;
+}
+
+.session-panel__placeholder {
+  padding: 32px 0;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(var(--c-muted), 0.4);
+}
+
+/* ── 세션 아이템 ── */
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  transition: background 0.12s;
+  cursor: pointer;
+}
+
+.session-item:hover {
+  background: rgba(var(--c-accent), 0.08);
+}
+
+.session-item--active {
+  background: rgba(var(--c-accent), 0.16);
+}
+
+.session-item__info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.session-item__title {
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: rgba(var(--c-text-3), 0.9);
+}
+
+.session-item__date {
+  font-size: 10px;
+  color: rgba(var(--c-muted), 0.45);
+}
+
+.session-item__delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 10px;
+  color: rgba(var(--c-danger-4), 0.4);
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+  cursor: pointer;
+}
+
+.session-item:hover .session-item__delete {
+  opacity: 1;
+}
+
+.session-item__delete:hover {
+  background: rgba(var(--c-danger-3), 0.15);
+  color: rgba(var(--c-danger-4), 0.9);
+}
+
+/* ══════════════════════════
+  대화 기록 뷰
+  ══════════════════════════ */
+.session-panel__messages {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 8px;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 86%;
+}
+
+.msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.msg--assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.msg__label {
+  margin-bottom: 3px;
+  padding: 0 2px;
+  font-size: 10px;
+  color: rgba(var(--c-muted), 0.4);
+}
+
+.msg__bubble {
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.msg--user .msg__bubble {
+  border: 1px solid rgba(var(--c-accent-2), 0.35);
+  border-bottom-right-radius: 4px;
+  background: rgba(var(--c-accent-2), 0.22);
+  color: rgba(var(--c-text-4), 0.95);
+}
+
+.msg--assistant .msg__bubble {
+  border: 1px solid rgba(var(--c-accent), 0.12);
+  border-bottom-left-radius: 4px;
+  background: rgba(var(--c-msg-bot), 0.85);
+  color: rgba(var(--c-text-5), 0.9);
+}
+
+/* ══════════════════════════
+  텍스트 입력 바
+  ══════════════════════════ */
+.session-panel__input-bar {
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 6px;
+  padding: 10px;
+  border-top: 1px solid rgba(var(--c-accent), 0.1);
+}
+
+.session-panel__mic,
+.session-panel__attach {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(var(--c-accent), 0.2);
+  border-radius: 8px;
+  background: rgba(var(--c-accent), 0.1);
+  font-size: 15px;
+  transition: background 0.15s;
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-panel__mic:hover,
+.session-panel__attach:hover {
+  background: rgba(var(--c-accent), 0.2);
+}
+
+/* ══════════════════════════
+  첨부 미리보기 (다중)
+  ══════════════════════════ */
+.attach-preview {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 10px;
+  overflow-x: auto;
+  border-top: 1px solid rgba(var(--c-accent), 0.1);
+}
+
+.attach-preview__item {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.attach-preview__img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.attach-preview__remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(var(--c-danger), 0.85);
+  font-size: 10px;
+  color: rgb(var(--c-white));
+  cursor: pointer;
+}
+
+/* ══════════════════════════
+  이미지 확대 뷰어 (웹 클라이언트와 동일 형태)
+  ══════════════════════════ */
+.viewer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+
+.viewer__img {
+  max-width: 94%;
+  max-height: 88%;
+  border-radius: 10px;
+}
+
+.session-panel__mic--recording {
+  border-color: rgba(var(--c-danger), 0.5);
+  background: rgba(var(--c-danger), 0.3);
+}
+
+.session-panel__input {
+  flex: 1;
+  min-height: 34px;
+  max-height: 120px;
+  padding: 8px 10px;
+  border: 1px solid rgba(var(--c-accent), 0.2);
+  border-radius: 8px;
+  outline: none;
+  background: rgba(var(--c-input), 0.8);
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(var(--c-text-4), 0.95);
+  resize: none;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.session-panel__input::placeholder {
+  color: rgba(var(--c-muted-2), 0.4);
+}
+
+.session-panel__input:focus {
+  border-color: rgba(var(--c-accent), 0.45);
+}
+
+.session-panel__send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(var(--c-accent-2), 0.35);
+  border-radius: 8px;
+  background: rgba(var(--c-accent-2), 0.2);
+  font-size: 16px;
+  color: rgba(var(--c-text), 0.9);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.session-panel__send:hover {
+  background: rgba(var(--c-accent-2), 0.35);
+}
+
+/* ══════════════════════════
+  상태 유틸
+  ══════════════════════════ */
+.hidden {
+  display: none;
+}

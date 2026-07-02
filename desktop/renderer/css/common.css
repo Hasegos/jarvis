@@ -1,0 +1,98 @@
+/* ══════════════════════════
+  디자인 토큰
+  ══════════════════════════ */
+:root {
+  --c-accent: 77, 180, 255;
+  --c-accent-2: 77, 140, 255;
+  --c-thumb: 100, 180, 255;
+
+  --c-text: 180, 210, 255;
+  --c-text-2: 200, 230, 255;
+  --c-text-3: 200, 225, 255;
+  --c-text-4: 210, 230, 255;
+  --c-text-5: 190, 215, 250;
+  --c-muted: 120, 160, 200;
+  --c-muted-2: 100, 140, 180;
+
+  --c-btn: 30, 30, 50;
+  --c-panel: 6, 10, 22;
+  --c-bubble: 8, 16, 32;
+  --c-popup: 18, 22, 42;
+  --c-input: 20, 30, 50;
+  --c-msg-bot: 25, 35, 55;
+  --c-confirm: 20, 10, 28;
+
+  --c-danger: 255, 60, 60;
+  --c-danger-2: 231, 76, 60;
+  --c-danger-3: 255, 80, 60;
+  --c-danger-4: 255, 100, 80;
+  --c-danger-text: 255, 96, 96;
+  --c-reject-text: 195, 16, 16;
+  --c-preview: 255, 200, 185;
+  --c-success: 39, 174, 96;
+  --c-white: 255, 255, 255;
+}
+
+/* ══════════════════════════
+  리셋
+  ══════════════════════════ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ══════════════════════════
+  투명 프레임리스 창
+  ══════════════════════════ */
+html,
+body {
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Segoe UI', sans-serif;
+  user-select: none;
+}
+
+/* ══════════════════════════
+  스크롤바 유틸 (.scroll-thin)
+  ══════════════════════════ */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--c-accent), 0.2) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(var(--c-accent), 0.2);
+}
+
+/* ══════════════════════════
+  범위 슬라이더 (.range-slider)
+  ══════════════════════════ */
+.range-slider {
+  height: 3px;
+  border-radius: 2px;
+  outline: none;
+  background: rgba(var(--c-accent), 0.22);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.range-slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(var(--c-thumb), 0.9);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
