@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from core.config import settings
+from core.constants.agents import AGENT_ROUTES, AGENT_PROMPTS, AgentType
 from core.constants.llm import THINKING_KEYWORDS, THINKING_LENGTH_THRESHOLD
 from core.constants.tool import (
     FORCED_TOOL_KEYWORDS,
@@ -57,16 +58,17 @@ def _should_think(user_text: str) -> bool:
 
 
 # ─────────────────────────────────────────
-# 2. 강제 도구 판단 (키워드 → 도구명 리스트)
+# 2. 강제 도구 판단 (키워드 → 도구명 + Agent)
 # ─────────────────────────────────────────
-def _resolve_forced_tools(user_text: str) -> list[str]:
+def _resolve_forced_tools(user_text: str) -> tuple[list[str], AgentType]:
     """
-    입력의 키워드로 강제 호출할 도구들을 등장 순서대로 결정한다.
+    입력의 키워드로 강제 호출할 도구들을 등장 순서대로 결정하고,
+    첫 도구로 담당 Agent 를 함께 판정한다.
 
     Args:
         user_text: 사용자 입력 텍스트
     Returns:
-        강제할 도구 이름 리스트 (등장 순서). 매칭 없으면 빈 리스트.
+        (강제 도구 이름 리스트, Agent 종류). 매칭 없으면 ([], "general").
     """
     lowered = user_text.lower()
     hits: list[tuple[int, str]] = []
@@ -83,7 +85,10 @@ def _resolve_forced_tools(user_text: str) -> list[str]:
     if "navigation" in result:
         result = [t for t in result if t != "os_control"]
 
-    return result
+    agent_type: AgentType = (
+        AGENT_ROUTES.get(result[0], "general") if result else "general"
+    )
+    return result, agent_type
 
 
 # ──────────────────────────────────────────
@@ -113,7 +118,7 @@ async def _prepare_turn(
         get_messages_by_session, db, session.session_id, settings.HISTORY_LIMIT,
     )
     history = [{"role": msg.role, "content": msg.content} for msg in messages]
-    
+
     if image_b64:
         history.append({
             "role": "user",
@@ -193,7 +198,7 @@ async def process_message_stream(
         {"type": "token",  "text": str}                         — 답변 조각
         {"type": "status", "text": str, "speech": str}          — 도구 실행 상태
         {"type": "confirm_required", ...}                       — destructive 확인 요청
-        {"type": "answer_complete", session_id, answer, user_text, timings} — 저장 완료
+        {"type": "answer_complete", session_id, answer, user_text, timings, agent_type} — 저장 완료
     """
     # ────────────────────────────────────────────────
     # 5-1. confirm 보류 자동 해소 (음성/텍스트 공통)
@@ -219,19 +224,27 @@ async def process_message_stream(
     timings: dict = {"embedding": embed_sec}
 
     # ──────────────────────────────────────
-    # 5-3. LLM 스트리밍 (도구 포함) → 공통 소비
+    # 5-3. Agent 분기 + LLM 스트리밍 (도구 포함) → 공통 소비
     # ──────────────────────────────────────
     use_thinking = _should_think(user_text)
-    forced_tools = _resolve_forced_tools(user_text)
+    forced_tools, agent_type = _resolve_forced_tools(user_text)
+    if image_b64:
+        agent_type = "screen"
+    system_prompt = AGENT_PROMPTS[agent_type]
     logger.debug(
-        "thinking=%s forced_tools=%s | input_len=%d",
+        "thinking=%s agent=%s forced_tools=%s | input_len=%d",
         "on" if use_thinking else "off",
+        agent_type,
         forced_tools,
         len(user_text),
     )
 
     if image_b64:
-        vlm_messages = build_vlm_messages(user_text, image_b64, context)
+        # VLM 경로는 use_raw_history=True 라 _build_messages 를 안 거친다.
+        # ScreenAgent 프롬프트는 여기서 직접 주입한다.
+        vlm_messages = build_vlm_messages(
+            user_text, image_b64, context, system_prompt=system_prompt
+        )
         gen = stream_chat_with_tools(
             vlm_messages, use_thinking,
             context      = None,
@@ -239,10 +252,14 @@ async def process_message_stream(
             use_raw_history = True,
         )
     else:
-        gen = stream_chat_with_tools(history, use_thinking, context, forced_tools)
+        gen = stream_chat_with_tools(
+            history, use_thinking, context, forced_tools,
+            system_prompt=system_prompt,
+        )
 
     async for ev in _consume_agent_stream(
-        db, gen, session.session_id, user_text, user_embedding, timings
+        db, gen, session.session_id, user_text, user_embedding, timings,
+        agent_type=agent_type,
     ):
         yield ev
 
@@ -257,6 +274,7 @@ async def _consume_agent_stream(
     user_text: str,
     user_embedding: list[float],
     timings: dict,
+    agent_type: AgentType = "general",
 ):
     """
     agent 제너레이터를 소비한다 — 토큰은 흘리고, confirm은 보류 저장 후 종료,
@@ -269,6 +287,7 @@ async def _consume_agent_stream(
         user_text     : 사용자 입력
         user_embedding: user 임베딩 (재계산 방지)
         timings       : 누적 타이밍 dict (embedding 키가 있을 수 있음)
+        agent_type    : 분기된 Agent 종류 (answer_complete 로 전달). 재개 시 general.
     Yields:
         token / status / confirm_required / answer_complete
     """
@@ -295,7 +314,8 @@ async def _consume_agent_stream(
 
     timings["llm"] = round(time.perf_counter() - t0, 2)
     yield await _finalize(
-        db, session_id, user_text, user_embedding, answer_parts, timings
+        db, session_id, user_text, user_embedding, answer_parts, timings,
+        agent_type=agent_type,
     )
 
 
@@ -309,6 +329,7 @@ async def _finalize(
     user_embedding: list[float],
     answer_parts: list[str],
     timings: dict,
+    agent_type: AgentType = "general",
 ) -> dict:
     """
     답변을 정리해 임베딩·저장하고 answer_complete 이벤트를 만든다.
@@ -323,6 +344,7 @@ async def _finalize(
         user_embedding: user 임베딩 (턴 준비 때 계산해 둔 값)
         answer_parts  : 스트리밍으로 모은 답변 조각
         timings       : 누적 타이밍 dict
+        agent_type    : 분기된 Agent 종류 (answer_complete 에 포함).
     Returns:
         answer_complete 이벤트 dict
     """
@@ -349,6 +371,7 @@ async def _finalize(
         "answer": answer,
         "user_text": user_text,
         "timings": timings,
+        "agent_type": agent_type,
     }
 
 
