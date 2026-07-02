@@ -129,7 +129,7 @@ async def send_message_stream(
     return StreamingResponse(
         _stream_sse(
             process_message_stream(
-                db, req.session_id, req.message, req.image_b64
+                db, req.session_id, req.message, req.images_b64 or None
             ),
             background_tasks,
         ),
