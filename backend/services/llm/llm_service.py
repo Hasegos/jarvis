@@ -15,6 +15,7 @@ def _build_messages(
     context: str | None = None,
     use_thinking: bool = False,
     force_search: bool = False,
+    system_prompt: str | None = None,
 ) -> list[dict]:
     """
     대화 히스토리 앞에 시스템 프롬프트를 prepend한다.
@@ -24,14 +25,16 @@ def _build_messages(
     묻히지 않도록 메시지 맨 끝(user 턴 뒤)에 붙인다.
 
     Args:
-        history     : user/assistant 대화 히스토리
-        context     : 프로필/위키/RAG 참고 블록. None이면 주입 안 함.
-        use_thinking: thinking 활성화 여부 (호환용 인자, 현재 메시지 구성엔 미반영).
-        force_search: True 면 web_search 강제 지시를 맨 끝에 주입.
+        history      : user/assistant 대화 히스토리
+        context      : 프로필/위키/RAG 참고 블록. None이면 주입 안 함.
+        use_thinking : thinking 활성화 여부 (호환용 인자, 현재 메시지 구성엔 미반영).
+        force_search : True 면 web_search 강제 지시를 맨 끝에 주입.
+        system_prompt: Agent별 시스템 프롬프트. None이면 기본 SYSTEM_PROMPT 사용.
     Returns:
         시스템 프롬프트(+컨텍스트, +강제검색 지시) 포함 메시지 리스트
     """
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    base_prompt = system_prompt or SYSTEM_PROMPT
+    messages = [{"role": "system", "content": base_prompt}]
     if context:
         messages.append({"role": "system", "content": context})
     messages = messages + history
@@ -122,7 +125,7 @@ def generate_summary(history: list[dict]) -> str:
     except Exception as e:
         logger.warning("요약 생성 오류: %s", e)
         raise RuntimeError("요약 생성 중 오류가 발생했습니다.") from None
-    
+
 
 # ──────────────────────────────────────
 # 4. VLM 멀티모달 메시지 빌드
@@ -131,12 +134,20 @@ def build_vlm_messages(
     user_text : str,
     image_b64 : str,
     context   : str | None = None,
+    system_prompt: str | None = None,
 ) -> list[dict]:
     """
     이미지 + 텍스트를 OpenAI Vision 형식 메시지로 빌드한다.
     Qwen2.5-VL은 content를 list[dict] 형태로 받는다.
+
+    Args:
+        user_text    : 사용자 입력 텍스트
+        image_b64    : base64 인코딩 이미지
+        context      : 프로필/위키/RAG 참고 블록. None이면 주입 안 함.
+        system_prompt: Agent별 시스템 프롬프트. None이면 기본 SYSTEM_PROMPT 사용.
     """
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    base_prompt = system_prompt or SYSTEM_PROMPT
+    messages = [{"role": "system", "content": base_prompt}]
     if context:
         messages.append({"role": "system", "content": context})
     messages.append({
