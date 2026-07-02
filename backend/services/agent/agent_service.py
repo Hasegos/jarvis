@@ -101,12 +101,20 @@ def stream_chat_with_tools(
     context: str | None = None,
     forced_tools: list[str] | None = None,
     use_raw_history : bool = False,
+    system_prompt: str | None = None,
 ) -> Iterator[dict]:
     """
     도구 호출을 처리하는 단일 스트리밍 파이프라인
 
     채팅·음성 모두 이 함수 하나를 거친다.
 
+    Args:
+        history        : user/assistant 대화 히스토리 (또는 raw 메시지)
+        use_thinking   : thinking 모드
+        context        : 프로필/위키/RAG 참고 블록
+        forced_tools   : 강제 도구 목록
+        use_raw_history: True 면 history 를 그대로 메시지로 사용 (VLM 경로).
+        system_prompt  : Agent별 시스템 프롬프트. use_raw_history=False 일 때만 반영.
     Yields:
         {"type": "token",  "text": str}                 — 답변 텍스트 조각
         {"type": "status", "text": str, "speech": str}  — 도구 실행 상태
@@ -118,7 +126,10 @@ def stream_chat_with_tools(
     if use_raw_history:
         messages = history
     else:
-        messages = _build_messages(history, context, use_thinking, bool(forced))
+        messages = _build_messages(
+            history, context, use_thinking, bool(forced),
+            system_prompt=system_prompt,
+        )
     yield from _run_tool_loop(messages, set(), use_thinking, forced)
 
 
