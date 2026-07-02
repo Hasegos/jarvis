@@ -235,24 +235,16 @@ def run(args: dict) -> str:
                 return err("경로를 찾을 수 없습니다.")
             summary = routes[0].get("summary") or {}
 
-            # ──────────────────────────────────────
-            # 4-7. 네이버 지도 길찾기 페이지 열기
-            # ──────────────────────────────────────
-            try:
-                o_name = urllib.parse.quote(origin_name)
-                d_name = urllib.parse.quote(destination)
-                browse_url = (
-                    f"https://map.naver.com/v5/directions/"
-                    f"{start_x},{start_y},{o_name}/"
-                    f"{goal_x},{goal_y},{d_name}/-/car"
-                )
-                client.post(
-                    f"{settings.STT_SERVER_URL}/browse",
-                    json={"url": browse_url},
-                    headers={"X-Internal-Token": settings.INTERNAL_API_TOKEN},
-                )
-            except Exception as e:
-                logger.debug("navigation 브라우저 열기 실패(무시): %s", e)
+            # ──────────────────────────────────────────────────
+            # 4-7. 네이버 지도 길찾기 URL —  호출한 기기에서 연다
+            # ──────────────────────────────────────────────────
+            o_name = urllib.parse.quote(origin_name)
+            d_name = urllib.parse.quote(destination)
+            browse_url = (
+                f"https://map.naver.com/v5/directions/"
+                f"{start_x},{start_y},{o_name}/"
+                f"{goal_x},{goal_y},{d_name}/-/car"
+            )
 
             # ──────────────────────────────────────
             # 4-8. 결과 반환 (m→km, ms→분 변환)
@@ -266,6 +258,7 @@ def run(args: dict) -> str:
                 duration_min=round(duration / 1000 / 60),
                 toll_fare=summary.get("tollFare"),
                 fuel_price=summary.get("fuelPrice"),
+                open_url=browse_url,
             )
 
     except httpx.HTTPStatusError as e:
