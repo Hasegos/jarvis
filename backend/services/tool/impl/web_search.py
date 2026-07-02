@@ -1,11 +1,10 @@
-import re, urllib.parse, httpx
+import re, urllib.parse
 
 from tavily import TavilyClient
 
 from core.config import settings
 from core.logger import get_logger
 from core.constants.tool import (
-    OS_CONTROL_TIMEOUT,
     WEB_SEARCH_MAX_RESULTS,
     WEB_SEARCH_RAW_MAX_CHARS,
     WEB_SEARCH_SNIPPET_MAX_CHARS,
@@ -29,7 +28,6 @@ _INJECTION_RE = re.compile(
 )
 
 _client = TavilyClient(api_key=settings.TAVILY_API_KEY)
-_browse_client = httpx.Client(timeout=OS_CONTROL_TIMEOUT)
 
 # ─────────────────────────
 # 1. 프롬프트 인젝션 제거
@@ -83,7 +81,8 @@ def run(args: dict) -> str:
     Args:
         args: {"query": 검색어}
     Returns:
-        {"answer": str, "results": [{title, url, snippet, page_content?}, ...]}
+        {"answer": str, "results": [{title, url, snippet, page_content?}, ...],
+         "open_url": 클라이언트가 열 구글 검색 URL}
         또는 {"error": ...} JSON 문자열
     """
     query = (args.get("query") or "").strip()
@@ -124,18 +123,11 @@ def run(args: dict) -> str:
         bool(results and "page_content" in results[0]),
     )
 
-    # 검색 결과를 호스트 브라우저에도 띄운다
-    try:
-        search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
-        _browse_client.post(
-            f"{settings.STT_SERVER_URL}/browse",
-            json={"url": search_url},
-            headers={"X-Internal-Token": settings.INTERNAL_API_TOKEN},
-        )
-    except Exception as e:
-        logger.debug("web_search 브라우저 열기 실패(무시): %s", e)
-
-    payload = {"results": results}
+    # 검색 URL을 결과를 호출한 기기(클라이언트)에서 열게 한다
+    payload = {
+        "results": results,
+        "open_url": f"https://www.google.com/search?q={urllib.parse.quote(query)}",
+    }
     if answer:
         payload["answer"] = answer
     return ok(**payload)
