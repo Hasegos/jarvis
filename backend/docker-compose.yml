@@ -7,7 +7,7 @@ services:
     build: .
     container_name: jarvis
     ports:
-      - "127.0.0.1:8000:8000"
+      - "8000:8000"
     env_file:
       - .env
     depends_on:
@@ -16,10 +16,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - "D:/02_Personal/01_WORK/my-brain:/vault:ro"
-      - "D:/02_Personal/01_WORK/jarvis:/vault-write:rw"
+      - "${VAULT_READ_HOST_PATH}:/vault:ro"
+      - "${VAULT_WRITE_HOST_PATH}:/vault-write:rw"
       # file_ops 영역 (FILE_OPS_{별칭}={등급}:{호스트경로})
-      - "D:/04_Jarvis:/data/fileops/jarvis:rw"
+      - "${VAULT_FILEOPS_HOST_PATH}:/data/fileops/jarvis:rw"
+      - "../app/web:/app/static/web:ro"
     restart: unless-stopped
 
   # ─────────────────────────────────────
