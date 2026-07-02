@@ -15,13 +15,15 @@ class ChatRequest(BaseModel):
     """
     session_id : Optional[int] = None
     message    : str = Field(..., max_length=10_000)
-    image_b64  : Optional[str] = None
+    images_b64 : Optional[list[str]] = Field(None, max_length=4)   # 이미지 첨부 (1~4장)
 
-    @field_validator("image_b64")
+    @field_validator("images_b64")
     @classmethod
-    def validate_image_b64(cls, v: str | None) -> str | None:
-        if v is not None and len(v.encode()) > 2_000_000:
-            raise ValueError("image_b64가 허용 크기(2MB)를 초과합니다.")
+    def validate_images_b64(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            for item in v:
+                if len(item.encode()) > 2_000_000:
+                    raise ValueError("images_b64 항목이 허용 크기(2MB)를 초과합니다.")
         return v
 
 
