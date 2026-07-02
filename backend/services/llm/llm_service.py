@@ -132,20 +132,21 @@ def generate_summary(history: list[dict]) -> str:
 # ──────────────────────────────────────
 def build_vlm_messages(
     user_text : str,
-    image_b64 : str,
+    image_b64 : str | list[str],
     context   : str | None = None,
     system_prompt: str | None = None,
 ) -> list[dict]:
     """
-    이미지 + 텍스트를 OpenAI Vision 형식 메시지로 빌드한다.
+    이미지(1장 이상) + 텍스트를 OpenAI Vision 형식 메시지로 빌드한다.
     Qwen2.5-VL은 content를 list[dict] 형태로 받는다.
 
     Args:
         user_text    : 사용자 입력 텍스트
-        image_b64    : base64 인코딩 이미지
+        image_b64    : base64 인코딩 이미지 — 단일 문자열 또는 리스트(다중 첨부)
         context      : 프로필/위키/RAG 참고 블록. None이면 주입 안 함.
         system_prompt: Agent별 시스템 프롬프트. None이면 기본 SYSTEM_PROMPT 사용.
     """
+    images = [image_b64] if isinstance(image_b64, str) else image_b64
     base_prompt = system_prompt or SYSTEM_PROMPT
     messages = [{"role": "system", "content": base_prompt}]
     if context:
@@ -153,10 +154,13 @@ def build_vlm_messages(
     messages.append({
         "role": "user",
         "content": [
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-            },
+            *(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img}"},
+                }
+                for img in images
+            ),
             {"type": "text", "text": user_text},
         ],
     })
