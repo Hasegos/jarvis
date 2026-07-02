@@ -59,7 +59,7 @@ def _collect_file_ops_areas() -> dict:
     for key, value in raw.items():
         if not key.startswith("FILE_OPS_") or ":" not in value:
             continue
-        alias = key[len("FILE_OPS_"):].strip()
+        alias = key[len("FILE_OPS_"):].strip().lower()
         if not alias:
             continue
         grade, host = value.split(":", 1)
