@@ -94,6 +94,7 @@ def _stream_sse(source, background_tasks: BackgroundTasks):
                         "session_id": ev["session_id"],
                         "answer"    : ev["answer"],
                         "audio_b64" : audio_b64,
+                        "agent_type": ev.get("agent_type", "general"),
                     })
                 else:
                     yield _sse(ev)
