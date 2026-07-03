@@ -1,0 +1,10 @@
+{
+  "name": "JARVIS",
+  "short_name": "JARVIS",
+  "description": "JARVIS AI 어시스턴트 모바일 클라이언트",
+  "start_url": "/static/web/index.html",
+  "scope": "/static/web/",
+  "display": "standalone",
+  "background_color": "#12141c",
+  "theme_color": "#12141c"
+}
