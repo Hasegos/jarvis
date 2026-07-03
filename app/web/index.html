@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12141c">
+  <title>JARVIS</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- 토큰 게이트 (최초 1회 — localStorage 저장) -->
+  <div class="gate hidden" id="gate">
+    <div class="gate__box">
+      <h2 class="gate__title">JARVIS 접속</h2>
+      <p class="gate__desc">내부 토큰(X-Internal-Token)을 입력하세요.</p>
+      <input class="gate__input" id="gate-token" type="password" placeholder="토큰" autocomplete="off">
+      <button class="gate__btn" id="gate-submit">접속</button>
+      <p class="gate__error hidden" id="gate-error">토큰이 올바르지 않습니다.</p>
+    </div>
+  </div>
+
+  <!-- 앱 본체 -->
+  <div class="app hidden" id="app">
+    <header class="app__header">
+      <button class="app__btn" id="btn-drawer" title="대화 목록">☰</button>
+      <span class="app__title">JARVIS</span>
+      <span class="app__badge" id="agent-badge">🤖 JARVIS</span>
+      <button class="app__btn" id="btn-new" title="새 대화">＋</button>
+    </header>
+
+    <!-- 세션 드로어 (왼쪽 슬라이드 인/아웃) -->
+    <aside class="drawer" id="drawer">
+      <div class="drawer__header">
+        <span class="drawer__title">대화 목록</span>
+        <button class="app__btn" id="btn-drawer-close" title="닫기">✕</button>
+      </div>
+      <ul class="drawer__list" id="session-list"></ul>
+    </aside>
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+
+    <!-- 채팅 -->
+    <main class="chat" id="chat-list"></main>
+
+    <!-- confirm 패널 -->
+    <div class="confirm hidden" id="confirm-panel">
+      <p class="confirm__preview" id="confirm-preview"></p>
+      <div class="confirm__buttons">
+        <button class="confirm__btn confirm__btn--approve" id="btn-approve">✓ 승인</button>
+        <button class="confirm__btn confirm__btn--reject" id="btn-reject">✕ 거절</button>
+      </div>
+    </div>
+
+    <!-- 첨부 미리보기 (다중 — attach.js가 항목 생성) -->
+    <div class="attach-preview hidden" id="attach-preview"></div>
+
+    <!-- 입력바: 📎 첨부 | 입력창 | 🎤 마이크 | ➤ 전송 -->
+    <footer class="inputbar">
+      <button class="inputbar__attach" id="btn-attach" title="이미지 첨부">📎</button>
+      <input type="file" id="attach-input" class="hidden" accept="image/*" multiple>
+      <textarea class="inputbar__input" id="chat-input" rows="1" placeholder="메시지 입력..."></textarea>
+      <button class="inputbar__mic" id="btn-mic" title="음성 입력">🎤</button>
+      <button class="inputbar__send" id="btn-send" title="전송">➤</button>
+    </footer>
+  </div>
+
+  <!-- 이미지 확대 뷰어 (썸네일 클릭 시) -->
+  <div class="viewer hidden" id="viewer">
+    <img class="viewer__img" id="viewer-img" alt="이미지 미리보기">
+  </div>
+
+  <!-- core → ui → features → 부트스트랩 (desktop 로드 순서 컨벤션) -->
+  <script src="js/core/dom.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/state.js"></script>
+  <script src="js/ui/ui.js"></script>
+  <script src="js/features/chat.js"></script>
+  <script src="js/features/voice.js"></script>
+  <script src="js/features/attach.js"></script>
+  <script src="js/features/sessions.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
