@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>JARVIS 채팅</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/session-win.css">
+</head>
+<body>
+  <div class="session-panel">
+    <!-- 헤더 -->
+    <div class="session-panel__header">
+      <button class="session-panel__btn session-panel__btn--back" id="btn-back" hidden title="목록으로">←</button>
+      <span class="session-panel__title" id="sw-title">대화 기록</span>
+      <div class="session-panel__header-btns">
+        <button class="session-panel__btn session-panel__btn--opacity"  id="btn-opacity"  title="투명도">◑</button>
+        <button class="session-panel__btn session-panel__btn--minimize" id="btn-minimize" title="최소화">−</button>
+        <button class="session-panel__btn session-panel__btn--new" id="btn-new" title="새 대화">✏</button>
+        <button class="session-panel__btn session-panel__btn--close" id="btn-close" title="닫기">✕</button>
+      </div>
+    </div>
+
+    <!-- 투명도 슬라이더 행 -->
+    <div class="session-panel__opacity-row hidden" id="opacity-row">
+      <span class="session-panel__opacity-label">투명도</span>
+      <input type="range" id="opacity-slider" class="session-panel__opacity-slider range-slider" min="20" max="100" value="96" step="1">
+      <span class="session-panel__opacity-val" id="opacity-val">96%</span>
+    </div>
+
+    <!-- 세션 목록 뷰 -->
+    <div class="session-panel__view" id="view-sessions">
+      <div class="session-panel__list scroll-thin" id="session-list"></div>
+    </div>
+
+    <!-- 대화 기록 뷰 -->
+    <div class="session-panel__view hidden" id="view-messages">
+      <div class="session-panel__messages scroll-thin" id="message-list"></div>
+    </div>
+
+    <!-- 첨부 미리보기 (다중 — session-win.js가 항목 생성) -->
+    <div class="attach-preview hidden" id="attach-preview"></div>
+
+    <!-- 텍스트 입력 바: 📎 첨부 | 입력창 | 🎤 마이크 | ↑ 전송 -->
+    <div class="session-panel__input-bar">
+      <button class="session-panel__attach" id="btn-attach" title="이미지 첨부">📎</button>
+      <input type="file" id="attach-input" class="hidden" accept="image/*" multiple>
+      <textarea class="session-panel__input scroll-thin" id="chat-input" placeholder="메시지 입력..." autocomplete="off" rows="1"></textarea>
+      <button class="session-panel__mic" id="btn-mic" title="음성 입력">🎤</button>
+      <button class="session-panel__send" id="btn-send" title="전송">↑</button>
+    </div>
+  </div>
+
+  <!-- core 인프라 → 세션창 로직 -->
+  <script src="js/core/bus.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/dom.js"></script>
+  <!-- 이미지 확대 뷰어 -->
+  <div class="viewer hidden" id="viewer">
+    <img class="viewer__img" id="viewer-img" alt="이미지 미리보기">
+  </div>
+
+  <script src="js/session/session-win.js"></script>
+</body>
+</html>

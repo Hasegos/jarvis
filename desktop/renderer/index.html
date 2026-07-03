@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>JARVIS</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 캐릭터 패널 -->
+  <div class="char-panel">
+    <button class="char-btn char-btn--sessions"   id="btn-sessions"     title="대화 기록">☰</button>
+    <button class="char-btn char-btn--close"                             title="종료">✕</button>
+    <button class="char-btn char-btn--visibility" id="btn-visibility"   title="캐릭터 표시/숨김">👁</button>
+    <button class="char-btn char-btn--opacity"    id="btn-char-opacity" title="투명도">◑</button>
+
+    <div class="agent-badge" id="agent-badge" title="현재 Agent">🤖 JARVIS</div>
+
+    <div class="opacity-popup" id="char-opacity-popup">
+      <input type="range" id="char-opacity-slider" class="opacity-popup__slider range-slider"
+             min="20" max="100" value="100" step="1">
+    </div>
+
+    <div class="bubble"></div>
+
+    <canvas class="avatar-canvas"></canvas>
+
+    <div class="confirm" id="confirm-panel" hidden>
+      <p class="confirm__preview" id="confirm-preview"></p>
+      <div class="confirm__buttons">
+        <button class="confirm__btn confirm__btn--approve" id="btn-approve">✓ 승인</button>
+        <button class="confirm__btn confirm__btn--reject"  id="btn-reject">✕ 거절</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/live2dcubismcore.min.js"></script>
+  <script src="vendor/pixi.min.js"></script>
+  <script src="vendor/cubism4.min.js"></script>
+
+  <!-- core 인프라 (bus → state → api → dom 순서 의존) -->
+  <script src="js/core/bus.js"></script>
+  <script src="js/core/state.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/dom.js"></script>
+  <!-- 아바타 → 기능 → UI → 부트스트랩 -->
+  <script src="js/features/emotion.js"></script>
+  <script src="js/avatar/live2d.js"></script>
+  <script src="js/features/chat.js"></script>
+  <script src="js/features/voice.js"></script>
+  <script src="js/features/screen.js"></script>
+  <script src="js/features/roam.js"></script>
+  <script src="js/ui/interact.js"></script>
+  <script src="js/ui/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
