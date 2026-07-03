@@ -1,0 +1,17 @@
+{
+  "name": "jarvis-desktop",
+  "version": "1.0.0",
+  "description": "JARVIS Desktop — Live2D AI Assistant",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^30.5.1"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "pixi-live2d-display": "^0.4.0",
+    "pixi.js": "^7.4.3"
+  }
+}
